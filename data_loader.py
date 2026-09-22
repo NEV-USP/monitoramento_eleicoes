@@ -2,130 +2,196 @@ import pandas as pd
 import unicodedata
 import re
 
-mapa_perfis = {
-    "pablo marcal": "Pablo Marçal",
-    "pablomarcal": "Pablo Marçal",
-    "pablomarcal1": "Pablo Marçal",
-    "pablo marcal oficial": "Pablo Marçal",
+from sqlalchemy import text
 
-    "tabata amaral": "Tabata Amaral",
-    "tabataamaralsp": "Tabata Amaral",
-    "tabata amaral 40": "Tabata Amaral",
+from database.connection import engine
 
-    "guilherme boulos": "Guilherme Boulos",
-    "guilhermeboulos": "Guilherme Boulos",
-    "guilherme boulos 50": "Guilherme Boulos",
 
-    "ricardo nunes": "Ricardo Nunes",
-    "prefeitoricardonunes": "Ricardo Nunes",
-    "ricardonunessp": "Ricardo Nunes",
-    "ricardo nunes 15": "Ricardo Nunes",
-
-    "datena": "Datena",
-    "datenaoficial": "Datena",
-    "oficialdatena": "Datena",
-    "canal do datena": "Datena",
-    "jose luiz datena 45": "Datena",
-
-    "marina helena": "Marina Helena",
-    "marinahelenabr": "Marina Helena",
-    "marina helena 30": "Marina Helena"
-
-}
+# ============================================================
+# NORMALIZAÇÃO
+# ============================================================
 
 def normalizar_nome(nome):
     if pd.isna(nome):
         return ""
 
-    # remover acentos
-    nome = unicodedata.normalize('NFKD', nome)
-    nome = nome.encode('ascii', 'ignore').decode('utf-8')
+    nome = str(nome)
 
-    # lowercase
+    nome = unicodedata.normalize("NFKD", nome)
+    nome = nome.encode("ascii", "ignore").decode("utf-8")
+
     nome = nome.lower()
 
-    # remover caracteres especiais
-    nome = re.sub(r'[^a-z0-9\s]', '', nome)
-
-    # remover espaços extras
-    nome = re.sub(r'\s+', ' ', nome).strip()
+    nome = re.sub(r"[^a-z0-9\s]", "", nome)
+    nome = re.sub(r"\s+", " ", nome).strip()
 
     return nome
 
+
+# ============================================================
+# DADOS GERAIS
+# ============================================================
+
 def carregar_dados_gerais():
+    """
+    Carrega as métricas mais recentes de cada perfil social.
 
-    # =========================
-    # 📂 Vereadores
-    # =========================
-    seg_vereadores = pd.read_csv("data/vereadores/seguidores_spublica.csv", sep=";")
-    int_vereadores = pd.read_csv("data/vereadores/interacoes_spublica.csv", sep=";")
+    Retorna um DataFrame compatível com o dashboard atual.
+    """
 
-    seg_vereadores["Cargo"] = "Vereador"
-    int_vereadores["Cargo"] = "Vereador"
+    sql = text("""
+        WITH metricas_recentes AS (
+            SELECT
+                mp.perfil_id,
+                mp.coleta_id,
+                mp.seguidores,
+                mp.numero_posts,
+                mp.likes,
+                mp.comentarios,
+                mp.reacoes_comentarios_compartilhamentos,
+                mp.taxa_interacao,
+                mp.alcance_dia,
+                mp.page_performance_index,
+                mp.visualizacoes_perfil,
 
-    # =========================
-    # 📂 Prefeitos
-    # =========================
-    seg_prefeitos = pd.read_csv("data/prefeitos/seguidores_sp.csv", sep=";")
-    int_prefeitos = pd.read_csv("data/prefeitos/interacoes_sp.csv", sep=";")
+                co.data_inicio,
+                co.data_fim,
 
-    seg_prefeitos["Cargo"] = "Prefeito"
-    int_prefeitos["Cargo"] = "Prefeito"
+                ROW_NUMBER() OVER (
+                    PARTITION BY mp.perfil_id
+                    ORDER BY
+                        co.data_fim DESC,
+                        co.id DESC
+                ) AS rn
 
-    # =========================
-    # 🔗 Concatenar
-    # =========================
-    seguidores = pd.concat([seg_vereadores, seg_prefeitos])
-    interacoes = pd.concat([int_vereadores, int_prefeitos])
+            FROM metricas_perfil mp
 
-    seguidores = seguidores.rename(columns={"Fans": "Seguidores"})
-    interacoes = interacoes.rename(columns={
-        "Number of Reactions, Comments & Shares": "Interacoes"
-    })
+            INNER JOIN coletas co
+                ON co.id = mp.coleta_id
+        )
 
-    df = pd.merge(
-        seguidores,
-        interacoes,
-        on=["Profile", "Social network", "Profile-ID", "Link", "Cargo"],
-        how="outer"
+        SELECT
+            c.profile_padronizado AS "Profile_padronizado",
+            c.cargo AS "Cargo",
+
+            ps.profile AS "Profile",
+            ps.network AS "Social network",
+            ps.profile_id AS "Profile-ID",
+            ps.link AS "Link",
+
+            mr.seguidores AS "Seguidores",
+            mr.numero_posts AS "Numero_Posts",
+            mr.likes AS "Likes",
+            mr.comentarios AS "Comentarios",
+
+            mr.reacoes_comentarios_compartilhamentos
+                AS "Interacoes",
+
+            mr.taxa_interacao AS "Taxa_Interacao",
+            mr.alcance_dia AS "Alcance_Dia",
+            mr.page_performance_index
+                AS "Page_Performance_Index",
+
+            mr.visualizacoes_perfil
+                AS "Visualizacoes_Perfil",
+
+            mr.data_inicio AS "Data_Inicio",
+            mr.data_fim AS "Data_Fim"
+
+        FROM metricas_recentes mr
+
+        INNER JOIN perfis_sociais ps
+            ON ps.id = mr.perfil_id
+
+        INNER JOIN candidatos c
+            ON c.id = ps.candidato_id
+
+        WHERE mr.rn = 1
+    """)
+
+    with engine.connect() as connection:
+        df = pd.read_sql(sql, connection)
+
+    # ========================================================
+    # TRATAMENTO
+    # ========================================================
+
+    df["Seguidores"] = (
+        pd.to_numeric(df["Seguidores"], errors="coerce")
+        .fillna(0)
     )
 
-    # =========================
-    # 🧠 Feature Engineering
-    # =========================
-    df["Seguidores"] = df["Seguidores"].fillna(0)
-    df["Interacoes"] = df["Interacoes"].fillna(0)
-
-    df["Engajamento"] = df.apply(
-        lambda row: row["Interacoes"] / row["Seguidores"]
-        if row["Seguidores"] > 0 else 0,
-        axis=1
+    df["Interacoes"] = (
+        pd.to_numeric(df["Interacoes"], errors="coerce")
+        .fillna(0)
     )
 
-    df["Profile_normalizado"] = df["Profile"].apply(normalizar_nome)
-    # print(df["Profile_normalizado"].head(70))
-    df["Profile_padronizado"] = df["Profile_normalizado"].map(mapa_perfis)
+    df["Engajamento"] = pd.to_numeric((
+        df["Interacoes"]
+        .div(df["Seguidores"].replace(0, pd.NA))
+        .fillna(0)
+    )).fillna(0)
 
-    # fallback: se não estiver no mapa, mantém original
-    df["Profile_padronizado"] = df["Profile_padronizado"].fillna(df["Profile"])
+    df["Profile_normalizado"] = (
+        df["Profile"]
+        .apply(normalizar_nome)
+    )
 
     return df
 
+
+# ============================================================
+# POSTS
+# ============================================================
+
 def carregar_posts():
-    posts = pd.read_csv("data/prefeitos/ranking_posts_sp.csv", sep=";")
+    """
+    Carrega os posts armazenados no PostgreSQL.
+    """
 
-    posts = posts.rename(columns={
-        "Number of Reactions, Comments & Shares": "Interacoes",
-        "Post interaction rate": "Taxa_Interacao"
-    })
+    sql = text("""
+        SELECT
+            p.id AS "Post-ID",
+            p.message_id AS "Message-ID",
 
-    posts["Message"] = posts["Message"].astype(str)
+            p.data AS "Date",
+            p.message AS "Message",
 
-    posts["Profile_normalizado"] = posts["Profile"].apply(normalizar_nome)
-    # print(posts["Profile_normalizado"].head(70))
-    posts["Profile_padronizado"] = posts["Profile_normalizado"].map(mapa_perfis)
+            p.link AS "Link",
+            p.external_links AS "External Links",
+            p.image_link AS "Image Link",
 
-    # fallback: se não estiver no mapa, mantém original
-    posts["Profile_padronizado"] = posts["Profile_padronizado"].fillna(posts["Profile"])
+            ps.profile AS "Profile",
+            ps.network AS "Social network",
+            ps.profile_id AS "Profile-ID",
+
+            c.profile_padronizado AS "Profile_padronizado",
+            c.cargo AS "Cargo"
+
+        FROM posts p
+
+        INNER JOIN perfis_sociais ps
+            ON ps.id = p.perfil_id
+
+        INNER JOIN candidatos c
+            ON c.id = ps.candidato_id
+
+        ORDER BY
+            p.data DESC NULLS LAST
+    """)
+
+    with engine.connect() as connection:
+        posts = pd.read_sql(sql, connection)
+
+    posts["Message"] = (
+        posts["Message"]
+        .fillna("")
+        .astype(str)
+    )
+
+    posts["Profile_normalizado"] = (
+        posts["Profile"]
+        .apply(normalizar_nome)
+    )
 
     return posts

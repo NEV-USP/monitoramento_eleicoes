@@ -34,7 +34,7 @@ FILTER_STYLE = {
 # =========================
 # 📊 Layout
 # =========================
-def layout():
+def layout(cargos):
     return html.Div([
 
         html.H2("🔀 Comparação entre Redes Sociais", style={"marginBottom": "20px"}),
@@ -43,13 +43,20 @@ def layout():
             html.Label("Cargo"),
             dcc.Dropdown(
                 options=[
-                    {"label": "Vereadores", "value": "Vereador"},
-                    {"label": "Prefeitos", "value": "Prefeito"},
-                    {"label": "Todos", "value": "Todos"}
+                    {
+                        "label": cargo,
+                        "value": cargo
+                    }
+                    for cargo in cargos
+                ] + [
+                    {
+                        "label": "Todos",
+                        "value": "Todos"
+                    }
                 ],
                 value="Todos",
                 id="filtro_cargo_comp"
-            ),
+            )
         ], style=FILTER_STYLE),
 
         # Linha 1

@@ -13,6 +13,7 @@ posts = carregar_posts()
 app = Dash(__name__)
 server = app.server 
 
+cargos = df["Cargo"].dropna().unique()
 redes = df["Social network"].dropna().unique()
 
 # =========================
@@ -60,14 +61,14 @@ app.layout = html.Div([
 
         dcc.Tab(
             label="📊 Geral",
-            children=geral.layout(redes),
+            children=geral.layout(redes, cargos),
             style=TAB_STYLE,
             selected_style=TAB_SELECTED_STYLE
         ),
 
         dcc.Tab(
             label="🔀 Comparação entre Redes",
-            children=comparativo.layout(),
+            children=comparativo.layout(cargos),
             style=TAB_STYLE,
             selected_style=TAB_SELECTED_STYLE
         ),

@@ -57,7 +57,7 @@ def limpar_texto(texto):
 def layout():
     return html.Div([
 
-        html.H2("📝 Análise de Posts (Prefeitos)", style={"marginBottom": "20px"}),
+        html.H2("📝 Análise de Posts", style={"marginBottom": "20px"}),
 
         # 🎛️ Filtros
         html.Div([
