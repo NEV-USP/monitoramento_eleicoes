@@ -63,12 +63,28 @@ CREATE TABLE IF NOT EXISTS coletas (
 
     data_importacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
+    status_importacao VARCHAR(20) NOT NULL DEFAULT 'PENDENTE',
+
+    data_processamento TIMESTAMP,
+
+    mensagem_erro TEXT,
+
     CONSTRAINT uq_coletas_periodo
         UNIQUE NULLS NOT DISTINCT (
             grupo,
             subgrupo,
             data_inicio,
             data_fim
+        ),
+
+    CONSTRAINT chk_coletas_status
+        CHECK (
+            status_importacao IN (
+                'PENDENTE',
+                'PROCESSANDO',
+                'CONCLUIDA',
+                'ERRO'
+            )
         )
 );
 

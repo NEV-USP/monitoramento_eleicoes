@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 import pandas as pd
@@ -325,35 +324,61 @@ def importar_perfis_sociais(
 
 
 # ============================================================
-# IMPORTAÇÃO COMPLETA
+# IMPORTAÇÃO VIA DATAFRAME
 # ============================================================
 
-def importar_perfis(pasta):
+def importar_perfis_dataframe(
+    metrics,
+    grupo
+):
+    """
+    Importa candidatos e perfis sociais a partir de um
+    DataFrame já preparado.
 
-    pasta = Path(pasta)
+    Parâmetros
+    ----------
+    metrics : pandas.DataFrame
+        DataFrame preparado a partir do Metrics Overview.
 
-    # --------------------------------------------------------
-    # Arquivo
-    # --------------------------------------------------------
+    grupo : str
+        Grupo da coleta:
+            Presidenciáveis
+            Senado
+            Governos
+            Deputados Federais
+    """
 
-    benchmarking = localizar_arquivo(
-        pasta,
-        "Benchmarking"
+    if metrics.empty:
+        raise ValueError(
+            "DataFrame de Metrics está vazio."
+        )
+
+    colunas_obrigatorias = {
+        "Profile",
+        "Network",
+        "Profile-ID",
+        "Link",
+    }
+
+    colunas_faltantes = (
+        colunas_obrigatorias
+        - set(metrics.columns)
     )
 
-    print(
-        f"\nArquivo: {benchmarking.name}"
-    )
+    if colunas_faltantes:
+        raise ValueError(
+            "Colunas obrigatórias ausentes no Metrics: "
+            + ", ".join(
+                sorted(colunas_faltantes)
+            )
+        )
 
     # --------------------------------------------------------
-    # Metrics
+    # Padronização
     # --------------------------------------------------------
 
-    metrics = preparar_metrics(
-        benchmarking
-    )
+    metrics = metrics.copy()
 
-    # Padronização mínima necessária.
     metrics["Profile"] = (
         metrics["Profile"]
         .astype("string")
@@ -367,75 +392,8 @@ def importar_perfis(pasta):
     )
 
     # --------------------------------------------------------
-    # Grupo, subgrupo e cargo
+    # Cargo
     # --------------------------------------------------------
-
-    partes = list(
-        pasta.parts
-    )
-
-    indice_semana = None
-
-    for i, parte in enumerate(partes):
-
-        if parte.lower().startswith(
-            "semana "
-        ):
-
-            indice_semana = i
-            break
-
-    if indice_semana is None:
-
-        raise ValueError(
-            f"Semana não encontrada na pasta: "
-            f"{pasta}"
-        )
-
-    if indice_semana < 1:
-
-        raise ValueError(
-            f"Estrutura de pasta inválida: "
-            f"{pasta}"
-        )
-
-    pasta_anterior = (
-        partes[indice_semana - 1]
-    )
-
-    grupos = {
-        "Presidenciáveis",
-        "Senado",
-        "Governos",
-        "Deputados Federais",
-    }
-
-    if pasta_anterior in grupos:
-
-        grupo = pasta_anterior
-        subgrupo = None
-
-    else:
-
-        if indice_semana < 2:
-
-            raise ValueError(
-                f"Não foi possível identificar "
-                f"o grupo: {pasta}"
-            )
-
-        grupo = (
-            partes[indice_semana - 2]
-        )
-
-        subgrupo = pasta_anterior
-
-        if grupo not in grupos:
-
-            raise ValueError(
-                f"Grupo não reconhecido: "
-                f"{grupo}"
-            )
 
     cargo = identificar_cargo(
         grupo
@@ -443,10 +401,6 @@ def importar_perfis(pasta):
 
     print(
         f"Grupo: {grupo}"
-    )
-
-    print(
-        f"Subgrupo: {subgrupo}"
     )
 
     print(
@@ -501,11 +455,114 @@ def importar_perfis(pasta):
     )
 
     print(
-        "IMPORTAÇÃO CONCLUÍDA"
+        "IMPORTAÇÃO DE PERFIS CONCLUÍDA"
     )
 
     print(
         "=" * 70
+    )
+
+
+# ============================================================
+# IMPORTAÇÃO VIA PASTA LOCAL
+# ============================================================
+
+def importar_perfis(pasta):
+
+    pasta = Path(pasta)
+
+    # --------------------------------------------------------
+    # Arquivo
+    # --------------------------------------------------------
+
+    benchmarking = localizar_arquivo(
+        pasta,
+        "Benchmarking"
+    )
+
+    print(
+        f"\nArquivo: {benchmarking.name}"
+    )
+
+    # --------------------------------------------------------
+    # Metrics
+    # --------------------------------------------------------
+
+    metrics = preparar_metrics(
+        benchmarking
+    )
+
+    # --------------------------------------------------------
+    # Identificar grupo
+    # --------------------------------------------------------
+
+    partes = list(
+        pasta.parts
+    )
+
+    indice_semana = None
+
+    for i, parte in enumerate(partes):
+
+        if parte.lower().startswith(
+            "semana "
+        ):
+
+            indice_semana = i
+            break
+
+    if indice_semana is None:
+
+        raise ValueError(
+            f"Semana não encontrada na pasta: "
+            f"{pasta}"
+        )
+
+    if indice_semana < 1:
+
+        raise ValueError(
+            f"Estrutura de pasta inválida: "
+            f"{pasta}"
+        )
+
+    pasta_anterior = (
+        partes[indice_semana - 1]
+    )
+
+    grupos = {
+        "Presidenciáveis",
+        "Senado",
+        "Governos",
+        "Deputados Federais",
+    }
+
+    if pasta_anterior in grupos:
+
+        grupo = pasta_anterior
+
+    else:
+
+        if indice_semana < 2:
+
+            raise ValueError(
+                f"Não foi possível identificar "
+                f"o grupo: {pasta}"
+            )
+
+        grupo = (
+            partes[indice_semana - 2]
+        )
+
+        if grupo not in grupos:
+
+            raise ValueError(
+                f"Grupo não reconhecido: "
+                f"{grupo}"
+            )
+
+    importar_perfis_dataframe(
+        metrics,
+        grupo
     )
 
 

@@ -59,28 +59,14 @@ def encontrar_cabecalho(df, coluna_procurada):
         f"Não foi encontrada a coluna '{coluna_procurada}'."
     )
 
-
-def preparar_metrics(caminho):
-    """
-    Lê e prepara a aba Metrics Overview.
-    """
-
-    bruto = pd.read_excel(
-        caminho,
-        sheet_name="Metrics Overview",
-        header=None
-    )
-
+def preparar_metrics_dataframe(bruto):
     linha_cabecalho = encontrar_cabecalho(
         bruto,
         "Profile"
     )
 
-    df = pd.read_excel(
-        caminho,
-        sheet_name="Metrics Overview",
-        header=linha_cabecalho
-    )
+    df = bruto.iloc[linha_cabecalho + 1:].copy()
+    df.columns = bruto.iloc[linha_cabecalho]
 
     df = df.dropna(axis=1, how="all")
     df = df.dropna(axis=0, how="all")
@@ -90,40 +76,44 @@ def preparar_metrics(caminho):
         for coluna in df.columns
     ]
 
-    return df
+    return df.reset_index(drop=True)
 
+def preparar_metrics(caminho):
+    bruto = pd.read_excel(
+        caminho,
+        sheet_name="Metrics Overview",
+        header=None
+    )
+
+    return preparar_metrics_dataframe(bruto)
+
+def preparar_posts_dataframe(bruto):
+    linha_cabecalho = encontrar_cabecalho(
+        bruto,
+        "Date"
+    )
+
+    df = bruto.iloc[linha_cabecalho + 1:].copy()
+    df.columns = bruto.iloc[linha_cabecalho]
+
+    df = df.dropna(axis=1, how="all")
+    df = df.dropna(axis=0, how="all")
+
+    df.columns = [
+        str(coluna).strip()
+        for coluna in df.columns
+    ]
+
+    return df.reset_index(drop=True)
 
 def preparar_posts(caminho):
-    """
-    Lê e prepara a aba Top 5000 Posts Overview.
-    """
-
     bruto = pd.read_excel(
         caminho,
         sheet_name="Top 5000 Posts Overview",
         header=None
     )
 
-    linha_cabecalho = encontrar_cabecalho(
-        bruto,
-        "Date"
-    )
-
-    df = pd.read_excel(
-        caminho,
-        sheet_name="Top 5000 Posts Overview",
-        header=linha_cabecalho
-    )
-
-    df = df.dropna(axis=1, how="all")
-    df = df.dropna(axis=0, how="all")
-
-    df.columns = [
-        str(coluna).strip()
-        for coluna in df.columns
-    ]
-
-    return df
+    return preparar_posts_dataframe(bruto)
 
 
 # ============================================================

@@ -3,7 +3,6 @@ from pathlib import Path
 import pandas as pd
 
 from sqlalchemy import text, bindparam
-# from sqlalchemy.dialects.postgresql import insert
 
 from database.connection import engine
 from database.preprocess import (
@@ -17,10 +16,13 @@ from database.preprocess import (
 TAMANHO_LOTE = 500
 
 
-def buscar_coleta(connection, pasta):
-    periodo = extrair_periodo(pasta)
-    grupo, subgrupo = identificar_grupo_subgrupo(pasta)
-
+def buscar_coleta(
+    connection,
+    grupo,
+    subgrupo,
+    data_inicio,
+    data_fim,
+):
     sql = text("""
         SELECT id
         FROM coletas
@@ -41,15 +43,20 @@ def buscar_coleta(connection, pasta):
         {
             "grupo": grupo,
             "subgrupo": subgrupo,
-            "data_inicio": periodo["data_inicio"],
-            "data_fim": periodo["data_fim"],
+            "data_inicio": data_inicio,
+            "data_fim": data_fim,
         },
     )
 
     coleta_id = resultado.scalar_one_or_none()
 
     if coleta_id is None:
-        raise ValueError("Coleta não encontrada no banco.")
+        raise ValueError(
+            "Coleta não encontrada no banco.\n"
+            f"Grupo: {grupo}\n"
+            f"Subgrupo: {subgrupo}\n"
+            f"Período: {data_inicio} até {data_fim}"
+        )
 
     return coleta_id
 
@@ -134,7 +141,9 @@ def preparar_linha(linha, perfis):
     if not profile_id or not network:
         return None
 
-    perfil_id = perfis.get((profile_id, network))
+    perfil_id = perfis.get(
+        (profile_id, network)
+    )
 
     if perfil_id is None:
         raise ValueError(
@@ -145,33 +154,62 @@ def preparar_linha(linha, perfis):
 
     return {
         "perfil_id": perfil_id,
-        "message_id": valor_texto(linha.get("Message-ID")),
-        "data": valor_data(linha.get("Date")),
-        "message": valor_texto(linha.get("Message")),
-        "link": valor_texto(linha.get("Link")),
-        "external_links": valor_texto(linha.get("External Links")),
-        "image_link": valor_texto(linha.get("Image Link")),
-        "likes": valor_inteiro(linha.get("Number of Likes")),
-        "comentarios": valor_inteiro(linha.get("Number of comments")),
-        "reacoes_comentarios_compartilhamentos": valor_inteiro(
-            linha.get("Reactions, Comments & Shares")
+        "message_id": valor_texto(
+            linha.get("Message-ID")
         ),
+        "data": valor_data(
+            linha.get("Date")
+        ),
+        "message": valor_texto(
+            linha.get("Message")
+        ),
+        "link": valor_texto(
+            linha.get("Link")
+        ),
+        "external_links": valor_texto(
+            linha.get("External Links")
+        ),
+        "image_link": valor_texto(
+            linha.get("Image Link")
+        ),
+        "likes": valor_inteiro(
+            linha.get("Number of Likes")
+        ),
+        "comentarios": valor_inteiro(
+            linha.get("Number of comments")
+        ),
+        "reacoes_comentarios_compartilhamentos":
+            valor_inteiro(
+                linha.get(
+                    "Reactions, Comments & Shares"
+                )
+            ),
         "taxa_interacao": valor_decimal(
             linha.get("Post interaction rate")
         ),
         "alcance_post": valor_decimal(
             linha.get("Reach per post")
         ),
-        "interacoes_impressao_visualizacao": valor_decimal(
-            linha.get("Interactions per impression/view")
-        ),
-        "sentimento_negativo_comentarios": valor_decimal(
-            linha.get("Post comments negative sentiment share")
-        ),
+        "interacoes_impressao_visualizacao":
+            valor_decimal(
+                linha.get(
+                    "Interactions per impression/view"
+                )
+            ),
+        "sentimento_negativo_comentarios":
+            valor_decimal(
+                linha.get(
+                    "Post comments negative sentiment share"
+                )
+            ),
     }
 
 
-def importar_lote(connection, lote, coleta_id):
+def importar_lote(
+    connection,
+    lote,
+    coleta_id,
+):
     """
     Insere/atualiza um lote de posts e suas métricas.
 
@@ -287,7 +325,8 @@ def importar_lote(connection, lote, coleta_id):
 
         if post_id is None:
             raise ValueError(
-                "Não foi possível encontrar o post após a importação.\n"
+                "Não foi possível encontrar o post "
+                "após a importação.\n"
                 f"Message-ID: {message_id}"
             )
 
@@ -347,8 +386,10 @@ def importar_lote(connection, lote, coleta_id):
             )
             ON CONFLICT (post_id, coleta_id)
             DO UPDATE SET
-                likes = EXCLUDED.likes,
-                comentarios = EXCLUDED.comentarios,
+                likes =
+                    EXCLUDED.likes,
+                comentarios =
+                    EXCLUDED.comentarios,
                 reacoes_comentarios_compartilhamentos =
                     EXCLUDED.reacoes_comentarios_compartilhamentos,
                 taxa_interacao =
@@ -366,33 +407,51 @@ def importar_lote(connection, lote, coleta_id):
             dados_metricas
         )
 
-    return len(dados_posts), len(dados_metricas)
+    return (
+        len(dados_posts),
+        len(dados_metricas),
+    )
 
 
-def importar_posts(pasta):
-    pasta = Path(pasta)
+def importar_posts_dataframe(
+    posts_df,
+    grupo,
+    subgrupo,
+    data_inicio,
+    data_fim,
+):
+    """
+    Importa posts a partir de um DataFrame já preparado.
 
-    content = localizar_arquivo(pasta, "Content")
+    Esta função não depende de arquivos locais e pode ser
+    utilizada tanto pelo fluxo local quanto pelo Google Drive.
+    """
 
-    print(f"\nArquivo: {content.name}")
-
-    posts_df = preparar_posts(content)
-
-    print(f"Registros encontrados: {len(posts_df)}")
+    print(
+        f"Registros encontrados: {len(posts_df)}"
+    )
 
     with engine.begin() as connection:
 
         coleta_id = buscar_coleta(
             connection,
-            pasta,
+            grupo,
+            subgrupo,
+            data_inicio,
+            data_fim,
         )
 
-        print(f"Coleta ID: {coleta_id}")
+        print(
+            f"Coleta ID: {coleta_id}"
+        )
 
-        perfis = carregar_perfis(connection)
+        perfis = carregar_perfis(
+            connection
+        )
 
         print(
-            f"Perfis carregados em memória: {len(perfis)}"
+            "Perfis carregados em memória: "
+            f"{len(perfis)}"
         )
 
         lote = []
@@ -426,13 +485,17 @@ def importar_posts(pasta):
                 metricas_processadas += metricas
 
                 print(
-                    f"  Lote processado: "
-                    f"{posts_processados}/{len(posts_df)}"
+                    "  Lote processado: "
+                    f"{posts_processados}/"
+                    f"{len(posts_df)}"
                 )
 
                 lote = []
 
-        # Último lote
+        # ==========================================================
+        # ÚLTIMO LOTE
+        # ==========================================================
+
         if lote:
 
             posts, metricas = importar_lote(
@@ -448,9 +511,61 @@ def importar_posts(pasta):
     print("=" * 70)
     print("IMPORTAÇÃO DE POSTS CONCLUÍDA")
     print("=" * 70)
-    print(f"Posts processados: {posts_processados}")
-    print(f"Métricas processadas: {metricas_processadas}")
-    print(f"Registros ignorados: {ignorados}")
+    print(
+        f"Posts processados: {posts_processados}"
+    )
+    print(
+        f"Métricas processadas: {metricas_processadas}"
+    )
+    print(
+        f"Registros ignorados: {ignorados}"
+    )
+
+    return (
+        posts_processados,
+        metricas_processadas,
+        ignorados,
+    )
+
+
+def importar_posts(pasta):
+    """
+    Mantém o fluxo de importação local.
+
+    Esta função apenas lê e prepara o arquivo e delega
+    a importação para importar_posts_dataframe().
+    """
+
+    pasta = Path(pasta)
+
+    content = localizar_arquivo(
+        pasta,
+        "Content"
+    )
+
+    print(
+        f"\nArquivo: {content.name}"
+    )
+
+    posts_df = preparar_posts(
+        content
+    )
+
+    periodo = extrair_periodo(
+        pasta
+    )
+
+    grupo, subgrupo = identificar_grupo_subgrupo(
+        pasta
+    )
+
+    return importar_posts_dataframe(
+        posts_df=posts_df,
+        grupo=grupo,
+        subgrupo=subgrupo,
+        data_inicio=periodo["data_inicio"],
+        data_fim=periodo["data_fim"],
+    )
 
 
 if __name__ == "__main__":

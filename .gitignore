@@ -3,6 +3,9 @@ data_old/
 
 .vscode/
 
+# Google Drive / Google Cloud
+google_drive/service_account.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

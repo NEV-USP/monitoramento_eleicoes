@@ -1,540 +1,923 @@
-from dash import html, dcc, Input, Output
+
+from dash import dcc, html, Input, Output
 import plotly.express as px
+import plotly.graph_objects as go
 import pandas as pd
 
 
-# =========================
-# 🎨 ESTILO
-# =========================
+# ============================================================
+# ESTILOS
+# ============================================================
 
 CARD_STYLE = {
     "backgroundColor": "#ffffff",
-    "padding": "15px",
+    "padding": "20px",
     "borderRadius": "10px",
-    "boxShadow": "0px 2px 8px rgba(0,0,0,0.1)",
-}
-
-ROW_STYLE = {
-    "display": "flex",
-    "gap": "20px",
+    "boxShadow": "0px 2px 8px rgba(0,0,0,0.08)",
     "marginBottom": "20px"
 }
 
-COL_STYLE = {
-    "flex": "1"
-}
-
-FILTER_STYLE = {
-    "backgroundColor": "#f8f9fa",
-    "padding": "15px",
-    "borderRadius": "10px",
-    "marginBottom": "20px"
+FILTER_LABEL_STYLE = {
+    "fontWeight": "bold",
+    "marginBottom": "5px",
+    "display": "block"
 }
 
 
-# =========================
-# 📊 Layout
-# =========================
+# ============================================================
+# GRÁFICO TEMPORAL
+# ============================================================
+
+def criar_grafico_temporal(
+    df,
+    coluna,
+    titulo,
+    ylabel=None
+):
+    if df.empty:
+        return go.Figure()
+
+    dados = (
+        df.groupby(
+            ["Data_Inicio", "Profile_padronizado"],
+            as_index=False
+        )[coluna]
+        .sum()
+    )
+
+    fig = px.line(
+        dados,
+        x="Data_Inicio",
+        y=coluna,
+        color="Profile_padronizado",
+        markers=True,
+        title=titulo
+    )
+
+    fig.update_layout(
+        xaxis_title="Período",
+        yaxis_title=ylabel or coluna,
+        legend_title="Candidato",
+        hovermode="x unified"
+    )
+
+    return fig
+
+
+# ============================================================
+# LAYOUT
+# ============================================================
 
 def layout(redes, cargos):
 
-    redes = list(redes)
-    cargos = list(cargos)
+    cargo_inicial = (
+        sorted(cargos)[0]
+        if len(cargos) > 0
+        else None
+    )
+
+    rede_inicial = (
+        sorted(redes)[0]
+        if len(redes) > 0
+        else None
+    )
 
     return html.Div([
 
-        html.H1(
-            "📊 Dashboard de Redes Sociais",
-            style={"marginBottom": "20px"}
-        ),
-
-        # =========================
-        # 🎛️ Filtros
-        # =========================
+        # ====================================================
+        # FILTROS
+        # ====================================================
 
         html.Div([
 
-            html.H3("Filtros"),
-
-            html.Label("Cargo"),
-
-            dcc.Dropdown(
-                options=[
-                    {
-                        "label": cargo,
-                        "value": cargo
-                    }
-                    for cargo in cargos
-                ] + [
-                    {
-                        "label": "Todos",
-                        "value": "Todos"
-                    }
-                ],
-                value="Todos",
-                id="filtro_cargo"
-            ),
-
-            html.Br(),
-
-            html.Label("Rede Social"),
-
-            dcc.Dropdown(
-                options=[
-                    {
-                        "label": rede,
-                        "value": rede
-                    }
-                    for rede in redes
-                ],
-                value=redes[0] if redes else None,
-                id="filtro_rede"
-            ),
-
-            html.Br(),
-
-            html.Label("Buscar Profile"),
-
-            dcc.Input(
-                id="filtro_nome",
-                placeholder="Digite o nome do candidato...",
-                style={"width": "100%"}
-            ),
-
-            html.Br(),
-            html.Br(),
-
-            html.Label("Top N"),
-
-            dcc.Slider(
-                min=5,
-                max=30,
-                step=5,
-                value=10,
-                id="top_n",
-                marks={
-                    i: str(i)
-                    for i in range(5, 31, 5)
+            html.H3(
+                "Filtros",
+                style={
+                    "marginTop": 0,
+                    "marginBottom": "20px"
                 }
+            ),
+
+            # ------------------------------------------------
+            # CARGO
+            # ------------------------------------------------
+
+            html.Div([
+                html.Label(
+                    "Cargo",
+                    style=FILTER_LABEL_STYLE
+                ),
+
+                dcc.Dropdown(
+                    id="filtro_cargo",
+                    options=[
+                        {
+                            "label": cargo,
+                            "value": cargo
+                        }
+                        for cargo in sorted(cargos)
+                    ],
+                    value=cargo_inicial,
+                    clearable=False
+                )
+
+            ], style={"marginBottom": "15px"}),
+
+            # ------------------------------------------------
+            # SUBGRUPO
+            # ------------------------------------------------
+
+            html.Div(
+                id="container_subgrupo",
+                children=[
+
+                    html.Label(
+                        "Subgrupo",
+                        style=FILTER_LABEL_STYLE
+                    ),
+
+                    dcc.Dropdown(
+                        id="filtro_subgrupo",
+                        options=[],
+                        value=None,
+                        clearable=False
+                    )
+
+                ],
+                style={
+                    "display": "none",
+                    "marginBottom": "15px"
+                }
+            ),
+
+            # ------------------------------------------------
+            # REDE SOCIAL
+            # ------------------------------------------------
+
+            html.Div([
+
+                html.Label(
+                    "Rede Social",
+                    style=FILTER_LABEL_STYLE
+                ),
+
+                dcc.Dropdown(
+                    id="filtro_rede",
+                    options=[
+                        {
+                            "label": rede,
+                            "value": rede
+                        }
+                        for rede in sorted(redes)
+                    ],
+                    value=rede_inicial,
+                    clearable=False
+                )
+
+            ], style={"marginBottom": "15px"}),
+
+            # ------------------------------------------------
+            # CANDIDATO
+            # ------------------------------------------------
+
+            html.Div([
+
+                html.Label(
+                    "Candidato",
+                    style=FILTER_LABEL_STYLE
+                ),
+
+                dcc.Dropdown(
+                    id="filtro_candidato",
+                    options=[],
+                    value=[],
+                    multi=True,
+                    clearable=True,
+                    placeholder="Selecione um ou mais candidatos"
+                )
+
+            ], style={"marginBottom": "15px"}),
+
+            # ------------------------------------------------
+            # PERÍODO
+            # ------------------------------------------------
+
+            html.Div([
+
+                html.Label(
+                    "Período",
+                    style=FILTER_LABEL_STYLE
+                ),
+
+                dcc.Dropdown(
+                    id="filtro_periodo",
+                    options=[],
+                    value=[],
+                    multi=True,
+                    clearable=True,
+                    placeholder="Selecione um ou mais períodos"
+                )
+
+            ])
+
+        ], style=CARD_STYLE),
+
+        # ====================================================
+        # EVOLUÇÃO TEMPORAL
+        # ====================================================
+
+        html.Div([
+
+            html.H3(
+                "Evolução temporal",
+                style={"marginTop": 0}
+            ),
+
+            dcc.Graph(
+                id="grafico_seguidores_temporal"
+            ),
+
+            dcc.Graph(
+                id="grafico_interacoes_temporal"
+            ),
+
+            dcc.Graph(
+                id="grafico_engajamento_temporal"
             )
 
-        ], style=FILTER_STYLE),
+        ], style=CARD_STYLE),
 
-        # =========================
-        # 📊 LINHA 1
-        # =========================
-
-        html.Div([
-
-            html.Div(
-                dcc.Graph(id="grafico_seguidores"),
-                style=CARD_STYLE | COL_STYLE
-            ),
-
-            html.Div(
-                dcc.Graph(id="grafico_interacoes"),
-                style=CARD_STYLE | COL_STYLE
-            ),
-
-        ], style=ROW_STYLE),
-
-        # =========================
-        # 📊 LINHA 2
-        # =========================
+        # ====================================================
+        # DESEMPENHO ATUAL
+        # ====================================================
 
         html.Div([
 
-            html.Div(
-                dcc.Graph(id="grafico_engajamento"),
-                style=CARD_STYLE | COL_STYLE
+            html.H3(
+                "Desempenho atual",
+                style={"marginTop": 0}
             ),
 
-            html.Div(
-                dcc.Graph(id="grafico_scatter"),
-                style=CARD_STYLE | COL_STYLE
+            dcc.Graph(
+                id="grafico_seguidores_atual"
             ),
 
-        ], style=ROW_STYLE),
-
-        # =========================
-        # 📊 LINHA 3
-        # =========================
-
-        html.Div([
-
-            html.Div(
-                dcc.Graph(id="grafico_heatmap"),
-                style=CARD_STYLE | COL_STYLE
+            dcc.Graph(
+                id="grafico_interacoes_atual"
             ),
 
-            html.Div(
-                dcc.Graph(id="grafico_comparativo"),
-                style=CARD_STYLE | COL_STYLE
+            dcc.Graph(
+                id="grafico_engajamento_atual"
             ),
 
-        ], style=ROW_STYLE),
-
-        # =========================
-        # 📊 LINHA 4
-        # =========================
-
-        html.Div([
-
-            html.Div(
-                dcc.Graph(id="grafico_cargo"),
-                style=CARD_STYLE
+            dcc.Graph(
+                id="grafico_scatter_atual"
             ),
 
-        ])
+            dcc.Graph(
+                id="grafico_heatmap_atual"
+            ),
 
-    ], style={
-        "backgroundColor": "#f4f6f9",
-        "padding": "20px",
-        "fontFamily": "Arial, sans-serif"
-    })
+            dcc.Graph(
+                id="grafico_rede_atual"
+            ),
+
+            dcc.Graph(
+                id="grafico_cargo_atual"
+            )
+
+        ], style=CARD_STYLE)
+
+    ])
 
 
-# =========================
-# 🔄 Callback
-# =========================
+# ============================================================
+# CALLBACKS
+# ============================================================
 
-def register_callbacks(app, df):
+def register_callbacks(app, df, historico):
+
+    # ========================================================
+    # 1. CARGO → SUBGRUPO
+    # ========================================================
 
     @app.callback(
-        Output("grafico_seguidores", "figure"),
-        Output("grafico_interacoes", "figure"),
-        Output("grafico_engajamento", "figure"),
-        Output("grafico_scatter", "figure"),
-        Output("grafico_heatmap", "figure"),
-        Output("grafico_comparativo", "figure"),
-        Output("grafico_cargo", "figure"),
-        Input("filtro_cargo", "value"),
-        Input("filtro_rede", "value"),
-        Input("filtro_nome", "value"),
-        Input("top_n", "value")
+        Output("container_subgrupo", "style"),
+        Output("filtro_subgrupo", "options"),
+        Output("filtro_subgrupo", "value"),
+
+        Input("filtro_cargo", "value")
     )
-    def atualizar(cargo, rede, nome, top_n):
+    def atualizar_subgrupos(cargo):
 
-        df_filtrado = df.copy()
+        if not cargo:
+            return (
+                {"display": "none"},
+                [],
+                None
+            )
 
-        # =========================
-        # 🔢 Garantir tipos numéricos
-        # =========================
+        dados = historico[
+            historico["Cargo"] == cargo
+        ].copy()
 
-        colunas_numericas = [
-            "Seguidores",
-            "Interacoes",
-            "Engajamento"
+        subgrupos = sorted(
+            dados["Subgrupo"]
+            .dropna()
+            .unique()
+        )
+
+        # Cargo sem subgrupo
+        if not subgrupos:
+            return (
+                {"display": "none"},
+                [],
+                None
+            )
+
+        opcoes = [
+            {
+                "label": subgrupo,
+                "value": subgrupo
+            }
+            for subgrupo in subgrupos
         ]
 
-        for coluna in colunas_numericas:
+        return (
+            {
+                "display": "block",
+                "marginBottom": "15px"
+            },
+            opcoes,
+            subgrupos[0]
+        )
 
-            if coluna in df_filtrado.columns:
 
-                df_filtrado[coluna] = pd.to_numeric(
-                    df_filtrado[coluna],
-                    errors="coerce"
-                ).fillna(0)
+    # ========================================================
+    # 2. CARGO + SUBGRUPO → REDE SOCIAL
+    # ========================================================
 
-        # =========================
-        # 🔎 Filtro por cargo
-        # =========================
+    @app.callback(
+        Output("filtro_rede", "options"),
+        Output("filtro_rede", "value"),
 
-        if cargo and cargo != "Todos":
+        Input("filtro_cargo", "value"),
+        Input("filtro_subgrupo", "value")
+    )
+    def atualizar_redes(cargo, subgrupo):
 
-            df_filtrado = df_filtrado[
-                df_filtrado["Cargo"] == cargo
+        if not cargo:
+            return [], None
+
+        dados = historico[
+            historico["Cargo"] == cargo
+        ].copy()
+
+        # Se o cargo possuir subgrupo, aplica o filtro.
+        subgrupos = (
+            dados["Subgrupo"]
+            .dropna()
+            .unique()
+        )
+
+        if len(subgrupos) > 0:
+
+            if not subgrupo:
+                return [], None
+
+            dados = dados[
+                dados["Subgrupo"] == subgrupo
             ]
 
-        # =========================
-        # 🔎 Filtro por rede
-        # =========================
+        redes_disponiveis = sorted(
+            dados["Social network"]
+            .dropna()
+            .unique()
+        )
+
+        opcoes = [
+            {
+                "label": rede,
+                "value": rede
+            }
+            for rede in redes_disponiveis
+        ]
+
+        valor = (
+            redes_disponiveis[0]
+            if redes_disponiveis
+            else None
+        )
+
+        return opcoes, valor
+
+
+    # ========================================================
+    # 3. CARGO + SUBGRUPO + REDE
+    #    → CANDIDATOS + PERÍODOS
+    # ========================================================
+
+    @app.callback(
+        Output("filtro_candidato", "options"),
+        Output("filtro_candidato", "value"),
+        Output("filtro_periodo", "options"),
+        Output("filtro_periodo", "value"),
+
+        Input("filtro_cargo", "value"),
+        Input("filtro_subgrupo", "value"),
+        Input("filtro_rede", "value")
+    )
+    def atualizar_candidatos_periodos(
+        cargo,
+        subgrupo,
+        rede
+    ):
+
+        if not cargo or not rede:
+            return [], [], [], []
+
+        dados = historico[
+            historico["Cargo"] == cargo
+        ].copy()
+
+        # ----------------------------------------------------
+        # SUBGRUPO
+        # ----------------------------------------------------
+
+        subgrupos = (
+            dados["Subgrupo"]
+            .dropna()
+            .unique()
+        )
+
+        if len(subgrupos) > 0:
+
+            if not subgrupo:
+                return [], [], [], []
+
+            dados = dados[
+                dados["Subgrupo"] == subgrupo
+            ]
+
+        # ----------------------------------------------------
+        # REDE
+        # ----------------------------------------------------
+
+        dados = dados[
+            dados["Social network"] == rede
+        ].copy()
+
+        if dados.empty:
+            return [], [], [], []
+
+        # ----------------------------------------------------
+        # CANDIDATOS
+        # ----------------------------------------------------
+
+        candidatos = sorted(
+            dados["Profile_padronizado"]
+            .dropna()
+            .unique()
+        )
+
+        opcoes_candidatos = [
+            {
+                "label": candidato,
+                "value": candidato
+            }
+            for candidato in candidatos
+        ]
+
+        # ----------------------------------------------------
+        # PERÍODOS
+        # ----------------------------------------------------
+
+        periodos = (
+            dados[
+                ["Data_Inicio", "Data_Fim"]
+            ]
+            .dropna()
+            .drop_duplicates()
+            .sort_values("Data_Inicio")
+        )
+
+        opcoes_periodos = []
+
+        for _, periodo in periodos.iterrows():
+
+            inicio = periodo["Data_Inicio"]
+            fim = periodo["Data_Fim"]
+
+            opcoes_periodos.append({
+                "label": (
+                    f"Semana {inicio.strftime('%d/%m')} "
+                    f"— {fim.strftime('%d/%m/%Y')}"
+                ),
+                "value": inicio.strftime("%Y-%m-%d")
+            })
+
+        return (
+            opcoes_candidatos,
+            [],
+            opcoes_periodos,
+            []
+        )
+
+
+    # ========================================================
+    # 4. EVOLUÇÃO TEMPORAL
+    # ========================================================
+
+    @app.callback(
+        Output(
+            "grafico_seguidores_temporal",
+            "figure"
+        ),
+        Output(
+            "grafico_interacoes_temporal",
+            "figure"
+        ),
+        Output(
+            "grafico_engajamento_temporal",
+            "figure"
+        ),
+
+        Input("filtro_cargo", "value"),
+        Input("filtro_subgrupo", "value"),
+        Input("filtro_rede", "value"),
+        Input("filtro_candidato", "value"),
+        Input("filtro_periodo", "value")
+    )
+    def atualizar_graficos_temporais(
+        cargo,
+        subgrupo,
+        rede,
+        candidatos,
+        periodos
+    ):
+
+        dados = historico.copy()
+
+        # ----------------------------------------------------
+        # CARGO
+        # ----------------------------------------------------
+
+        if cargo:
+            dados = dados[
+                dados["Cargo"] == cargo
+            ]
+
+        # ----------------------------------------------------
+        # SUBGRUPO
+        # ----------------------------------------------------
+
+        if subgrupo:
+            dados = dados[
+                dados["Subgrupo"] == subgrupo
+            ]
+
+        # ----------------------------------------------------
+        # REDE
+        # ----------------------------------------------------
 
         if rede:
-
-            df_filtrado = df_filtrado[
-                df_filtrado["Social network"] == rede
+            dados = dados[
+                dados["Social network"] == rede
             ]
 
-        # =========================
-        # 🔎 Filtro por candidato
-        # =========================
+        # ----------------------------------------------------
+        # CANDIDATOS
+        # ----------------------------------------------------
 
-        if nome:
-
-            nome = str(nome).strip()
-
-            df_filtrado = df_filtrado[
-                df_filtrado["Profile_padronizado"]
-                .fillna("")
-                .astype(str)
-                .str.contains(
-                    nome,
-                    case=False,
-                    na=False
+        if candidatos:
+            dados = dados[
+                dados["Profile_padronizado"].isin(
+                    candidatos
                 )
             ]
 
-        # =========================
-        # 🔢 Top N
-        # =========================
+        # ----------------------------------------------------
+        # PERÍODOS
+        # ----------------------------------------------------
 
-        df_top = (
-            df_filtrado
-            .sort_values(
-                "Seguidores",
-                ascending=False
-            )
-            .head(int(top_n))
-        )
+        if periodos:
 
-        # =========================
-        # 🎨 Estilo
-        # =========================
-
-        def estilizar(fig):
-
-            fig.update_layout(
-                template="plotly_white",
-                title_x=0.5,
-                margin=dict(
-                    l=20,
-                    r=20,
-                    t=50,
-                    b=20
-                )
+            periodos_datas = pd.to_datetime(
+                periodos,
+                errors="coerce"
             )
 
-            return fig
-
-        # =========================
-        # 🚫 Sem dados
-        # =========================
-
-        if df_filtrado.empty:
-
-            fig_vazio = px.scatter(
-                title="Nenhum dado encontrado para os filtros selecionados"
-            )
-
-            fig_vazio.update_layout(
-                template="plotly_white",
-                title_x=0.5
-            )
-
-            return (
-                fig_vazio,
-                fig_vazio,
-                fig_vazio,
-                fig_vazio,
-                fig_vazio,
-                fig_vazio,
-                fig_vazio
-            )
-
-        # =========================
-        # 📊 Seguidores
-        # =========================
-
-        fig_seguidores = estilizar(
-            px.bar(
-                df_top,
-                x="Profile_padronizado",
-                y="Seguidores",
-                title=f"Top {top_n} Seguidores - {rede}"
-            )
-        )
-
-        # =========================
-        # 📊 Interações
-        # =========================
-
-        fig_interacoes = estilizar(
-            px.bar(
-                df_top,
-                x="Profile_padronizado",
-                y="Interacoes",
-                title=f"Top {top_n} Interações - {rede}"
-            )
-        )
-
-        # =========================
-        # 📊 Engajamento
-        # =========================
-
-        df_engajamento = (
-            df_top
-            .sort_values(
-                "Engajamento",
-                ascending=False
-            )
-        )
-
-        fig_engajamento = estilizar(
-            px.bar(
-                df_engajamento,
-                x="Profile_padronizado",
-                y="Engajamento",
-                title="Taxa de Engajamento"
-            )
-        )
-
-        # =========================
-        # 📊 Scatter
-        # =========================
-
-        df_scatter = df_filtrado[
-            (df_filtrado["Seguidores"] > 0) &
-            (df_filtrado["Interacoes"] > 0)
-        ].copy()
-
-        # Escala exclusivamente visual para o tamanho
-        # dos pontos.
-        df_scatter["Tamanho_Ponto"] = (
-            df_scatter["Engajamento"] * 1000
-        ).clip(lower=5)
-
-        if df_scatter.empty:
-
-            fig_scatter = px.scatter(
-                title="Seguidores vs Interações"
-            )
-
-        else:
-
-            fig_scatter = px.scatter(
-                df_scatter,
-                x="Seguidores",
-                y="Interacoes",
-                size="Tamanho_Ponto",
-                color="Engajamento",
-                hover_data=[
-                    "Profile_padronizado",
-                    "Seguidores",
-                    "Interacoes",
-                    "Engajamento"
-                ],
-                title="Seguidores vs Interações",
-                log_x=True,
-                log_y=True
-            )
-
-        fig_scatter = estilizar(fig_scatter)
-
-        # =========================
-        # 📊 Heatmap
-        # =========================
-
-        df_heatmap = df_filtrado[
-            (df_filtrado["Seguidores"] > 0) &
-            (df_filtrado["Interacoes"] > 0)
-        ].copy()
-
-        if df_heatmap.empty:
-
-            fig_heatmap = px.density_heatmap(
-                title="Densidade de Perfis"
-            )
-
-        else:
-
-            fig_heatmap = px.density_heatmap(
-                df_heatmap,
-                x="Seguidores",
-                y="Interacoes",
-                title="Densidade de Perfis"
-            )
-
-        fig_heatmap = estilizar(fig_heatmap)
-
-        # =========================
-        # 📊 Comparação entre redes
-        # =========================
-        #
-        # Aqui usamos o dataframe original,
-        # mas respeitando o filtro de cargo e
-        # candidato. O filtro de rede não é
-        # aplicado porque o objetivo deste
-        # gráfico é justamente comparar redes.
-
-        df_comparativo = df.copy()
-
-        if cargo and cargo != "Todos":
-
-            df_comparativo = df_comparativo[
-                df_comparativo["Cargo"] == cargo
-            ]
-
-        if nome:
-
-            nome = str(nome).strip()
-
-            df_comparativo = df_comparativo[
-                df_comparativo["Profile_padronizado"]
-                .fillna("")
-                .astype(str)
-                .str.contains(
-                    nome,
-                    case=False,
-                    na=False
+            dados = dados[
+                dados["Data_Inicio"].isin(
+                    periodos_datas
                 )
             ]
 
-        df_agg = (
-            df_comparativo
-            .groupby("Social network", as_index=False)
-            .agg({
-                "Seguidores": "sum",
-                "Interacoes": "sum"
-            })
+        # ----------------------------------------------------
+        # GRÁFICOS
+        # ----------------------------------------------------
+
+        grafico_seguidores = criar_grafico_temporal(
+            dados,
+            "Seguidores",
+            "Evolução de seguidores",
+            "Seguidores"
         )
 
-        fig_comparativo = estilizar(
-            px.bar(
-                df_agg,
-                x="Social network",
-                y=[
-                    "Seguidores",
-                    "Interacoes"
-                ],
-                barmode="group",
-                title="Comparação entre Redes"
-            )
+        grafico_interacoes = criar_grafico_temporal(
+            dados,
+            "Interacoes",
+            "Evolução de interações",
+            "Interações"
         )
 
-        # =========================
-        # 📊 Comparação por cargo
-        # =========================
-
-        df_cargo = (
-            df
-            .groupby("Cargo", as_index=False)
-            .agg({
-                "Seguidores": "sum",
-                "Interacoes": "sum",
-                "Engajamento": "mean"
-            })
-        )
-
-        fig_cargo = estilizar(
-            px.bar(
-                df_cargo,
-                x="Cargo",
-                y=[
-                    "Seguidores",
-                    "Interacoes"
-                ],
-                barmode="group",
-                title="Desempenho por Cargo"
-            )
+        grafico_engajamento = criar_grafico_temporal(
+            dados,
+            "Taxa_Interacao",
+            "Evolução da taxa de interação",
+            "Taxa de interação"
         )
 
         return (
-            fig_seguidores,
-            fig_interacoes,
-            fig_engajamento,
-            fig_scatter,
-            fig_heatmap,
-            fig_comparativo,
-            fig_cargo
+            grafico_seguidores,
+            grafico_interacoes,
+            grafico_engajamento
+        )
+
+
+    # ========================================================
+    # 5. DESEMPENHO ATUAL
+    # ========================================================
+
+    @app.callback(
+        Output(
+            "grafico_seguidores_atual",
+            "figure"
+        ),
+        Output(
+            "grafico_interacoes_atual",
+            "figure"
+        ),
+        Output(
+            "grafico_engajamento_atual",
+            "figure"
+        ),
+        Output(
+            "grafico_scatter_atual",
+            "figure"
+        ),
+        Output(
+            "grafico_heatmap_atual",
+            "figure"
+        ),
+        Output(
+            "grafico_rede_atual",
+            "figure"
+        ),
+        Output(
+            "grafico_cargo_atual",
+            "figure"
+        ),
+
+        Input("filtro_cargo", "value"),
+        Input("filtro_subgrupo", "value"),
+        Input("filtro_rede", "value"),
+        Input("filtro_candidato", "value")
+    )
+    def atualizar_desempenho_atual(
+        cargo,
+        subgrupo,
+        rede,
+        candidatos
+    ):
+
+        dados = df.copy()
+
+        # ----------------------------------------------------
+        # CARGO
+        # ----------------------------------------------------
+
+        if cargo:
+            dados = dados[
+                dados["Cargo"] == cargo
+            ]
+
+        # ----------------------------------------------------
+        # SUBGRUPO
+        # ----------------------------------------------------
+
+        if subgrupo:
+            dados = dados[
+                dados["Subgrupo"] == subgrupo
+            ]
+
+        # ----------------------------------------------------
+        # REDE
+        # ----------------------------------------------------
+
+        if rede:
+            dados = dados[
+                dados["Social network"] == rede
+            ]
+
+        # ----------------------------------------------------
+        # CANDIDATOS
+        # ----------------------------------------------------
+
+        if candidatos:
+            dados = dados[
+                dados["Profile_padronizado"].isin(
+                    candidatos
+                )
+            ]
+
+        # ----------------------------------------------------
+        # DATAFRAME VAZIO
+        # ----------------------------------------------------
+
+        if dados.empty:
+
+            vazio = go.Figure()
+
+            return (
+                vazio,
+                vazio,
+                vazio,
+                vazio,
+                vazio,
+                vazio,
+                vazio
+            )
+
+        # ====================================================
+        # SEGUIDORES
+        # ====================================================
+
+        seguidores = (
+            dados
+            .sort_values("Seguidores", ascending=False)
+        )
+
+        grafico_seguidores = px.bar(
+            seguidores,
+            x="Profile_padronizado",
+            y="Seguidores",
+            title="Seguidores"
+        )
+
+        grafico_seguidores.update_layout(
+            xaxis_title="Candidato",
+            yaxis_title="Seguidores"
+        )
+
+        # ====================================================
+        # INTERAÇÕES
+        # ====================================================
+
+        interacoes = (
+            dados
+            .sort_values("Interacoes", ascending=False)
+        )
+
+        grafico_interacoes = px.bar(
+            interacoes,
+            x="Profile_padronizado",
+            y="Interacoes",
+            title="Interações"
+        )
+
+        grafico_interacoes.update_layout(
+            xaxis_title="Candidato",
+            yaxis_title="Interações"
+        )
+
+        # ====================================================
+        # ENGAJAMENTO
+        # ====================================================
+
+        engajamento = (
+            dados
+            .sort_values("Engajamento", ascending=False)
+        )
+
+        grafico_engajamento = px.bar(
+            engajamento,
+            x="Profile_padronizado",
+            y="Engajamento",
+            title="Engajamento"
+        )
+
+        grafico_engajamento.update_layout(
+            xaxis_title="Candidato",
+            yaxis_title="Engajamento"
+        )
+
+        # ====================================================
+        # SCATTER
+        # ====================================================
+
+        grafico_scatter = px.scatter(
+            dados,
+            x="Seguidores",
+            y="Interacoes",
+            size="Engajamento",
+            hover_name="Profile_padronizado",
+            title="Seguidores × Interações"
+        )
+
+        grafico_scatter.update_layout(
+            xaxis_title="Seguidores",
+            yaxis_title="Interações"
+        )
+
+        # ====================================================
+        # HEATMAP
+        # ====================================================
+
+        dados_heatmap = dados[
+            [
+                "Profile_padronizado",
+                "Seguidores",
+                "Interacoes",
+                "Engajamento"
+            ]
+        ].copy()
+
+        dados_heatmap = dados_heatmap.set_index(
+            "Profile_padronizado"
+        )
+
+        grafico_heatmap = px.imshow(
+            dados_heatmap,
+            text_auto=True,
+            aspect="auto",
+            title="Indicadores por candidato"
+        )
+
+        # ====================================================
+        # DESEMPENHO DA REDE SELECIONADA
+        # ====================================================
+
+        dados_rede = (
+            dados
+            .groupby(
+                "Social network",
+                as_index=False
+            )[
+                [
+                    "Seguidores",
+                    "Interacoes"
+                ]
+            ]
+            .sum()
+        )
+
+        grafico_rede = px.bar(
+            dados_rede,
+            x="Social network",
+            y=[
+                "Seguidores",
+                "Interacoes"
+            ],
+            barmode="group",
+            title="Desempenho da Rede Selecionada"
+        )
+
+        # ====================================================
+        # DESEMPENHO POR CARGO
+        # ====================================================
+
+        dados_cargo = (
+            dados
+            .groupby(
+                "Cargo",
+                as_index=False
+            )[
+                [
+                    "Seguidores",
+                    "Interacoes"
+                ]
+            ]
+            .sum()
+        )
+
+        grafico_cargo = px.bar(
+            dados_cargo,
+            x="Cargo",
+            y=[
+                "Seguidores",
+                "Interacoes"
+            ],
+            barmode="group",
+            title="Desempenho por Cargo"
+        )
+
+        return (
+            grafico_seguidores,
+            grafico_interacoes,
+            grafico_engajamento,
+            grafico_scatter,
+            grafico_heatmap,
+            grafico_rede,
+            grafico_cargo
         )

@@ -1,26 +1,47 @@
 import os
 
 from dash import Dash, dcc, html
-from data_loader import carregar_dados_gerais, carregar_posts
 
-from pages import geral, comparativo
+from data_loader import (
+    carregar_dados_gerais,
+    carregar_historico,
+    carregar_posts
+)
+
+from pages import geral
 from pages import posts as posts_page
+
 
 # =========================
 # 📊 Dados
 # =========================
+
 df = carregar_dados_gerais()
+historico = carregar_historico()
 posts = carregar_posts()
 
-app = Dash(__name__)
-server = app.server 
 
-cargos = df["Cargo"].dropna().unique()
-redes = df["Social network"].dropna().unique()
+# =========================
+# 🔎 FILTROS INICIAIS
+# =========================
+
+cargos = sorted(
+    df["Cargo"]
+    .dropna()
+    .unique()
+)
+
+redes = sorted(
+    df["Social network"]
+    .dropna()
+    .unique()
+)
+
 
 # =========================
 # 🎨 ESTILO GLOBAL
 # =========================
+
 TAB_STYLE = {
     "padding": "12px",
     "fontWeight": "bold",
@@ -35,21 +56,37 @@ TAB_SELECTED_STYLE = {
     "borderTop": "3px solid #007bff"
 }
 
+
 # =========================
-# 🧩 Layout
+# 🧩 LAYOUT
 # =========================
+
+app = Dash(__name__)
+
+server = app.server
+
+
 app.layout = html.Div([
 
-    # 🔝 Header
+    # =========================
+    # 🔝 HEADER
+    # =========================
+
     html.Div([
+
         html.H1(
             "📊 Análise de Redes Sociais - Eleições",
             style={"margin": 0}
         ),
+
         html.P(
             "Dashboard analítico de desempenho digital por candidato",
-            style={"margin": 0, "color": "#666"}
+            style={
+                "margin": 0,
+                "color": "#666"
+            }
         )
+
     ], style={
         "backgroundColor": "#ffffff",
         "padding": "20px",
@@ -58,26 +95,30 @@ app.layout = html.Div([
         "marginBottom": "20px"
     }),
 
-    # 📑 Tabs
+
+    # =========================
+    # 📑 TABS
+    # =========================
+
     dcc.Tabs([
 
         dcc.Tab(
             label="📊 Geral",
-            children=geral.layout(redes, cargos),
-            style=TAB_STYLE,
-            selected_style=TAB_SELECTED_STYLE
-        ),
 
-        dcc.Tab(
-            label="🔀 Comparação entre Redes",
-            children=comparativo.layout(cargos),
+            children=geral.layout(
+                redes,
+                cargos
+            ),
+
             style=TAB_STYLE,
             selected_style=TAB_SELECTED_STYLE
         ),
 
         dcc.Tab(
             label="📝 Posts",
+
             children=posts_page.layout(),
+
             style=TAB_STYLE,
             selected_style=TAB_SELECTED_STYLE
         )
@@ -96,17 +137,34 @@ app.layout = html.Div([
 
 
 # =========================
-# 🔄 Callbacks
+# 🔄 CALLBACKS
 # =========================
-geral.register_callbacks(app, df)
-posts_page.register_callbacks(app, posts)
-comparativo.register_callbacks(app, df)
+
+geral.register_callbacks(
+    app,
+    df,
+    historico
+)
+
+posts_page.register_callbacks(
+    app,
+    posts
+)
+
 
 # =========================
-# ▶️ Run
+# ▶️ RUN
 # =========================
+
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8050))
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            8050
+        )
+    )
+
     app.run(
         host="0.0.0.0",
         port=port,

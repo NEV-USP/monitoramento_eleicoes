@@ -1,3 +1,4 @@
+
 from pathlib import Path
 
 import pandas as pd
@@ -16,13 +17,16 @@ from database.preprocess import (
 # BUSCAR COLETA
 # ============================================================
 
-def buscar_coleta(connection, pasta):
+def buscar_coleta(
+    connection,
+    grupo,
+    subgrupo,
+    data_inicio,
+    data_fim
+):
     """
-    Localiza a coleta correspondente à pasta semanal.
+    Localiza a coleta correspondente ao período informado.
     """
-
-    periodo = extrair_periodo(pasta)
-    grupo, subgrupo = identificar_grupo_subgrupo(pasta)
 
     sql = text("""
         SELECT id
@@ -44,8 +48,8 @@ def buscar_coleta(connection, pasta):
         {
             "grupo": grupo,
             "subgrupo": subgrupo,
-            "data_inicio": periodo["data_inicio"],
-            "data_fim": periodo["data_fim"],
+            "data_inicio": data_inicio,
+            "data_fim": data_fim,
         }
     )
 
@@ -56,8 +60,8 @@ def buscar_coleta(connection, pasta):
             "Coleta não encontrada no banco.\n"
             f"Grupo: {grupo}\n"
             f"Subgrupo: {subgrupo}\n"
-            f"Data inicial: {periodo['data_inicio']}\n"
-            f"Data final: {periodo['data_fim']}\n\n"
+            f"Data inicial: {data_inicio}\n"
+            f"Data final: {data_fim}\n\n"
             "Execute primeiro o importador de coletas."
         )
 
@@ -185,33 +189,146 @@ def importar_lote(connection, sql, dados):
 
 
 # ============================================================
-# IMPORTAÇÃO
+# SQL DAS MÉTRICAS
 # ============================================================
 
-def importar_metricas_perfil(pasta):
+SQL_METRICAS = text("""
+    INSERT INTO metricas_perfil (
+        perfil_id,
+        coleta_id,
+        seguidores,
+        numero_posts,
+        likes,
+        comentarios,
+        taxa_interacao,
+        alcance_dia,
+        page_performance_index,
+        reacoes_comentarios_compartilhamentos,
+        visualizacoes_perfil,
+        external_links,
+        image_link
+    )
+    VALUES (
+        :perfil_id,
+        :coleta_id,
+        :seguidores,
+        :numero_posts,
+        :likes,
+        :comentarios,
+        :taxa_interacao,
+        :alcance_dia,
+        :page_performance_index,
+        :reacoes_comentarios_compartilhamentos,
+        :visualizacoes_perfil,
+        :external_links,
+        :image_link
+    )
+    ON CONFLICT (
+        perfil_id,
+        coleta_id
+    )
+    DO UPDATE SET
+        seguidores =
+            EXCLUDED.seguidores,
 
-    pasta = Path(pasta)
+        numero_posts =
+            EXCLUDED.numero_posts,
 
-    # --------------------------------------------------------
-    # Arquivo
-    # --------------------------------------------------------
+        likes =
+            EXCLUDED.likes,
 
-    benchmarking = localizar_arquivo(
-        pasta,
-        "Benchmarking"
+        comentarios =
+            EXCLUDED.comentarios,
+
+        taxa_interacao =
+            EXCLUDED.taxa_interacao,
+
+        alcance_dia =
+            EXCLUDED.alcance_dia,
+
+        page_performance_index =
+            EXCLUDED.page_performance_index,
+
+        reacoes_comentarios_compartilhamentos =
+            EXCLUDED.reacoes_comentarios_compartilhamentos,
+
+        visualizacoes_perfil =
+            EXCLUDED.visualizacoes_perfil,
+
+        external_links =
+            EXCLUDED.external_links,
+
+        image_link =
+            EXCLUDED.image_link
+""")
+
+
+# ============================================================
+# IMPORTAÇÃO VIA DATAFRAME
+# ============================================================
+
+def importar_metricas_perfil_dataframe(
+    metrics,
+    grupo,
+    subgrupo,
+    data_inicio,
+    data_fim
+):
+    """
+    Importa métricas de perfil a partir de um DataFrame
+    já preparado.
+
+    Parâmetros
+    ----------
+    metrics : pandas.DataFrame
+        DataFrame preparado do Metrics Overview.
+
+    grupo : str
+        Grupo da coleta.
+
+    subgrupo : str ou None
+        Subgrupo da coleta.
+
+    data_inicio : date
+        Data inicial da coleta.
+
+    data_fim : date
+        Data final da coleta.
+    """
+
+    if metrics.empty:
+        raise ValueError(
+            "DataFrame de Metrics está vazio."
+        )
+
+    colunas_obrigatorias = {
+        "Profile-ID",
+        "Network",
+        "Follower",
+        "Number of posts",
+        "Number of Likes",
+        "Number of comments",
+        "Post interaction rate",
+        "Reach per day",
+        "Page Performance Index",
+        "Reactions, Comments & Shares",
+        "Profile Views",
+        "External Links",
+        "Image Link",
+    }
+
+    colunas_faltantes = (
+        colunas_obrigatorias
+        - set(metrics.columns)
     )
 
-    print(
-        f"\nArquivo: {benchmarking.name}"
-    )
-
-    # --------------------------------------------------------
-    # Ler Metrics Overview
-    # --------------------------------------------------------
-
-    metrics = preparar_metrics(
-        benchmarking
-    )
+    if colunas_faltantes:
+        raise ValueError(
+            "Colunas obrigatórias ausentes no Metrics: "
+            + ", ".join(
+                sorted(colunas_faltantes)
+            )
+        )
 
     print(
         f"Registros encontrados: {len(metrics)}"
@@ -229,7 +346,10 @@ def importar_metricas_perfil(pasta):
 
         coleta_id = buscar_coleta(
             connection,
-            pasta
+            grupo,
+            subgrupo,
+            data_inicio,
+            data_fim
         )
 
         print(
@@ -237,7 +357,7 @@ def importar_metricas_perfil(pasta):
         )
 
         # ----------------------------------------------------
-        # Carregar perfis uma única vez
+        # Carregar perfis
         # ----------------------------------------------------
 
         perfis = carregar_perfis(
@@ -245,82 +365,9 @@ def importar_metricas_perfil(pasta):
         )
 
         print(
-            f"Perfis carregados em memória: {len(perfis)}"
+            f"Perfis carregados em memória: "
+            f"{len(perfis)}"
         )
-
-        # ----------------------------------------------------
-        # SQL
-        # ----------------------------------------------------
-
-        sql = text("""
-            INSERT INTO metricas_perfil (
-                perfil_id,
-                coleta_id,
-                seguidores,
-                numero_posts,
-                likes,
-                comentarios,
-                taxa_interacao,
-                alcance_dia,
-                page_performance_index,
-                reacoes_comentarios_compartilhamentos,
-                visualizacoes_perfil,
-                external_links,
-                image_link
-            )
-            VALUES (
-                :perfil_id,
-                :coleta_id,
-                :seguidores,
-                :numero_posts,
-                :likes,
-                :comentarios,
-                :taxa_interacao,
-                :alcance_dia,
-                :page_performance_index,
-                :reacoes_comentarios_compartilhamentos,
-                :visualizacoes_perfil,
-                :external_links,
-                :image_link
-            )
-            ON CONFLICT (
-                perfil_id,
-                coleta_id
-            )
-            DO UPDATE SET
-                seguidores =
-                    EXCLUDED.seguidores,
-
-                numero_posts =
-                    EXCLUDED.numero_posts,
-
-                likes =
-                    EXCLUDED.likes,
-
-                comentarios =
-                    EXCLUDED.comentarios,
-
-                taxa_interacao =
-                    EXCLUDED.taxa_interacao,
-
-                alcance_dia =
-                    EXCLUDED.alcance_dia,
-
-                page_performance_index =
-                    EXCLUDED.page_performance_index,
-
-                reacoes_comentarios_compartilhamentos =
-                    EXCLUDED.reacoes_comentarios_compartilhamentos,
-
-                visualizacoes_perfil =
-                    EXCLUDED.visualizacoes_perfil,
-
-                external_links =
-                    EXCLUDED.external_links,
-
-                image_link =
-                    EXCLUDED.image_link
-        """)
 
         # ----------------------------------------------------
         # Preparar registros
@@ -328,7 +375,6 @@ def importar_metricas_perfil(pasta):
 
         dados_lote = []
 
-        importados = 0
         ignorados = 0
 
         for _, linha in metrics.iterrows():
@@ -350,13 +396,14 @@ def importar_metricas_perfil(pasta):
                 ignorados += 1
 
                 print(
-                    "Ignorado: Profile-ID ou Network vazio."
+                    "Ignorado: "
+                    "Profile-ID ou Network vazio."
                 )
 
                 continue
 
             # ------------------------------------------------
-            # Buscar perfil em memória
+            # Buscar perfil
             # ------------------------------------------------
 
             perfil_id = perfis.get(
@@ -454,16 +501,14 @@ def importar_metricas_perfil(pasta):
             })
 
         # ----------------------------------------------------
-        # Inserção em lote
+        # Inserção
         # ----------------------------------------------------
 
-        if dados_lote:
-
-            importados = importar_lote(
-                connection,
-                sql,
-                dados_lote
-            )
+        importados = importar_lote(
+            connection,
+            SQL_METRICAS,
+            dados_lote
+        )
 
     # --------------------------------------------------------
     # Resultado
@@ -488,6 +533,68 @@ def importar_metricas_perfil(pasta):
 
     print(
         f"Registros ignorados: {ignorados}"
+    )
+
+    return importados, ignorados
+
+
+# ============================================================
+# IMPORTAÇÃO VIA PASTA LOCAL
+# ============================================================
+
+def importar_metricas_perfil(pasta):
+
+    pasta = Path(pasta)
+
+    # --------------------------------------------------------
+    # Arquivo
+    # --------------------------------------------------------
+
+    benchmarking = localizar_arquivo(
+        pasta,
+        "Benchmarking"
+    )
+
+    print(
+        f"\nArquivo: {benchmarking.name}"
+    )
+
+    # --------------------------------------------------------
+    # Metrics
+    # --------------------------------------------------------
+
+    metrics = preparar_metrics(
+        benchmarking
+    )
+
+    # --------------------------------------------------------
+    # Período
+    # --------------------------------------------------------
+
+    periodo = extrair_periodo(
+        pasta
+    )
+
+    # --------------------------------------------------------
+    # Grupo / subgrupo
+    # --------------------------------------------------------
+
+    grupo, subgrupo = (
+        identificar_grupo_subgrupo(
+            pasta
+        )
+    )
+
+    # --------------------------------------------------------
+    # Importação
+    # --------------------------------------------------------
+
+    return importar_metricas_perfil_dataframe(
+        metrics=metrics,
+        grupo=grupo,
+        subgrupo=subgrupo,
+        data_inicio=periodo["data_inicio"],
+        data_fim=periodo["data_fim"],
     )
 
 
