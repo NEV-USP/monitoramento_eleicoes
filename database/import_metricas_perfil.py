@@ -312,7 +312,7 @@ def importar_metricas_perfil_dataframe(
         "Reach per day",
         "Page Performance Index",
         "Reactions, Comments & Shares",
-        "Profile Views",
+        # "Profile Views",
         "External Links",
         "Image Link",
     }
