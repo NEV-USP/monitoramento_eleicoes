@@ -66,14 +66,61 @@ app = Dash(__name__)
 server = app.server
 
 
+# =========================
+# 🏛️ RODAPÉ / LOGOS
+# =========================
+
+FOOTER_STYLE = {
+    "backgroundColor": "#ffffff",
+    "borderTop": "1px solid #dee2e6",
+    "display": "flex",
+    "alignItems": "center",
+    "justifyContent": "center",
+    "gap": "50px",
+    "padding": "25px 20px",
+    "marginTop": "30px",
+    "boxShadow": "0px -2px 8px rgba(0,0,0,0.05)"
+}
+
+LOGO_STYLE = {
+    "height": "70px",
+    "width": "auto",
+    "maxWidth": "180px",
+    "objectFit": "contain"
+}
+
+footer = html.Footer([
+    html.A(
+        html.Img(
+            src="/assets/logos/nev.png",
+            style=LOGO_STYLE
+        ),
+        href="https://nev.prp.usp.br/",
+        target="_blank"
+    ),
+    html.A(
+        html.Img(
+            src="/assets/logos/obcom.png",
+            style=LOGO_STYLE
+        ),
+        href="https://obcom.net.br/",
+        target="_blank"
+    ),
+    html.A(
+        html.Img(
+            src="/assets/logos/icmc.png",
+            style=LOGO_STYLE
+        ),
+        href="https://www.icmc.usp.br/",
+        target="_blank"
+    )
+], style=FOOTER_STYLE)
+
+
 app.layout = html.Div([
 
-    # =========================
-    # 🔝 HEADER
-    # =========================
-
+    # HEADER
     html.Div([
-
         html.H1(
             "📊 Análise de Redes Sociais - Eleições",
             style={"margin": 0}
@@ -95,30 +142,22 @@ app.layout = html.Div([
         "marginBottom": "20px"
     }),
 
-
-    # =========================
-    # 📑 TABS
-    # =========================
-
+    # ABAS
     dcc.Tabs([
 
         dcc.Tab(
             label="📊 Geral",
-
             children=geral.layout(
                 redes,
                 cargos
             ),
-
             style=TAB_STYLE,
             selected_style=TAB_SELECTED_STYLE
         ),
 
         dcc.Tab(
             label="📝 Posts",
-
             children=posts_page.layout(),
-
             style=TAB_STYLE,
             selected_style=TAB_SELECTED_STYLE
         )
@@ -127,12 +166,16 @@ app.layout = html.Div([
         "backgroundColor": "#f4f6f9",
         "padding": "10px",
         "borderRadius": "10px"
-    })
+    }),
+
+    # LOGOS
+    footer
 
 ], style={
     "backgroundColor": "#f4f6f9",
     "padding": "20px",
-    "fontFamily": "Arial, sans-serif"
+    "fontFamily": "Arial, sans-serif",
+    "minHeight": "100vh"
 })
 
 
@@ -150,7 +193,6 @@ posts_page.register_callbacks(
     app,
     posts
 )
-
 
 # =========================
 # ▶️ RUN

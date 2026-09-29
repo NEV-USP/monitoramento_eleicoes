@@ -376,13 +376,6 @@ def layout():
                         id="grafico_engajamento_posts"
                     ),
                     style=CARD_STYLE
-                ),
-
-                html.Div(
-                    dcc.Graph(
-                        id="grafico_sentimento_posts"
-                    ),
-                    style=CARD_STYLE
                 )
 
             ],
@@ -835,11 +828,6 @@ def register_callbacks(app, posts):
         ),
 
         Output(
-            "grafico_sentimento_posts",
-            "figure"
-        ),
-
-        Output(
             "tabela_top_posts",
             "data"
         ),
@@ -959,7 +947,6 @@ def register_callbacks(app, posts):
 
             return (
                 resumo,
-                vazio,
                 vazio,
                 vazio,
                 vazio,
@@ -1165,37 +1152,6 @@ def register_callbacks(app, posts):
         )
 
         # ====================================================
-        # 5. SENTIMENTO NEGATIVO
-        # ====================================================
-
-        dados_sentimento = (
-            dados
-            .groupby(
-                "Profile_padronizado",
-                as_index=False
-            )["Sentimento_Negativo"]
-            .mean()
-            .sort_values(
-                "Sentimento_Negativo",
-                ascending=False
-            )
-        )
-
-        fig_sentimento = px.bar(
-            dados_sentimento,
-            x="Profile_padronizado",
-            y="Sentimento_Negativo",
-            title="Participação média de comentários negativos"
-        )
-
-        fig_sentimento.update_layout(
-            template="plotly_white",
-            xaxis_title="Candidato",
-            yaxis_title="Sentimento negativo",
-            title_x=0.5
-        )
-
-        # ====================================================
         # 6. TOP POSTS
         # ====================================================
 
@@ -1333,7 +1289,6 @@ def register_callbacks(app, posts):
             fig_temporal,
             fig_interacoes,
             fig_engajamento,
-            fig_sentimento,
             tabela,
             wordclouds
         )
