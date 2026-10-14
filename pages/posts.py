@@ -9,6 +9,10 @@ import base64
 from io import BytesIO
 import re
 import pandas as pd
+from pages.ranking import (
+    TOP_N_OPTIONS,
+    obter_top_perfis_por_seguidores,
+)
 
 
 # ============================================================
@@ -273,6 +277,25 @@ def layout():
             ], style={"marginBottom": "15px"}),
 
             # ------------------------------------------------
+            # TOP N POR SEGUIDORES
+            # ------------------------------------------------
+
+            html.Div([
+                html.Label(
+                    "Ranking por seguidores",
+                    style=FILTER_LABEL_STYLE
+                ),
+
+                dcc.Dropdown(
+                    id="posts_filtro_top_n",
+                    options=TOP_N_OPTIONS,
+                    value=10,
+                    clearable=False
+                )
+
+            ], style={"marginBottom": "15px"}),
+
+            # ------------------------------------------------
             # CANDIDATO
             # ------------------------------------------------
 
@@ -486,7 +509,7 @@ def layout():
 # CALLBACKS
 # ============================================================
 
-def register_callbacks(app, posts):
+def register_callbacks(app, posts, df_atual):
 
     # ========================================================
     # 1. INICIALIZA CARGOS
@@ -705,12 +728,17 @@ def register_callbacks(app, posts):
         Input(
             "posts_filtro_rede",
             "value"
+        ),
+        Input(
+            "posts_filtro_top_n",
+            "value"
         )
     )
     def atualizar_candidatos_periodos(
         cargo,
         subgrupo,
-        rede
+        rede,
+        top_n
     ):
 
         if not cargo or not rede:
@@ -737,6 +765,22 @@ def register_callbacks(app, posts):
 
         dados = dados[
             dados["Social network"] == rede
+        ]
+
+        # ----------------------------------------------------
+        # LIMITAR AOS TOP N MAIS SEGUIDOS
+        # ----------------------------------------------------
+
+        top_perfis = obter_top_perfis_por_seguidores(
+            df_atual,
+            cargo=cargo,
+            subgrupo=subgrupo,
+            rede=rede,
+            top_n=top_n,
+        )
+
+        dados = dados[
+            dados["Profile_padronizado"].isin(top_perfis)
         ]
 
         if dados.empty:
@@ -853,6 +897,11 @@ def register_callbacks(app, posts):
         ),
 
         Input(
+            "posts_filtro_top_n",
+            "value"
+        ),
+
+        Input(
             "posts_filtro_candidato",
             "value"
         ),
@@ -863,10 +912,10 @@ def register_callbacks(app, posts):
         )
     )
     def atualizar_posts(
-
         cargo,
         subgrupo,
         rede,
+        top_n,
         candidatos,
         periodos
     ):
@@ -899,6 +948,22 @@ def register_callbacks(app, posts):
             dados = dados[
                 dados["Social network"] == rede
             ]
+
+        # ----------------------------------------------------
+        # TOP N POR SEGUIDORES ATUAIS
+        # ----------------------------------------------------
+
+        top_perfis = obter_top_perfis_por_seguidores(
+            df_atual,
+            cargo=cargo,
+            subgrupo=subgrupo,
+            rede=rede,
+            top_n=top_n,
+        )
+
+        dados = dados[
+            dados["Profile_padronizado"].isin(top_perfis)
+        ]
 
         # ----------------------------------------------------
         # CANDIDATO

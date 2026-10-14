@@ -189,10 +189,7 @@ geral.register_callbacks(
     historico
 )
 
-posts_page.register_callbacks(
-    app,
-    posts
-)
+posts_page.register_callbacks(app, posts, df)
 
 # =========================
 # ▶️ RUN

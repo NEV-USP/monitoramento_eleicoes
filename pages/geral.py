@@ -3,7 +3,10 @@ from dash import dcc, html, Input, Output
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
-
+from pages.ranking import (
+    TOP_N_OPTIONS,
+    obter_top_perfis_por_seguidores,
+)
 
 # ============================================================
 # ESTILOS
@@ -171,6 +174,25 @@ def layout(redes, cargos):
                         for rede in sorted(redes)
                     ],
                     value=rede_inicial,
+                    clearable=False
+                )
+
+            ], style={"marginBottom": "15px"}),
+
+            # ------------------------------------------------
+            # TOP N POR SEGUIDORES
+            # ------------------------------------------------
+
+            html.Div([
+                html.Label(
+                    "Ranking por seguidores",
+                    style=FILTER_LABEL_STYLE
+                ),
+
+                dcc.Dropdown(
+                    id="filtro_top_n",
+                    options=TOP_N_OPTIONS,
+                    value=10,
                     clearable=False
                 )
 
@@ -425,14 +447,15 @@ def register_callbacks(app, df, historico):
 
         Input("filtro_cargo", "value"),
         Input("filtro_subgrupo", "value"),
-        Input("filtro_rede", "value")
+        Input("filtro_rede", "value"),
+        Input("filtro_top_n", "value")
     )
     def atualizar_candidatos_periodos(
         cargo,
         subgrupo,
-        rede
+        rede,
+        top_n
     ):
-
         if not cargo or not rede:
             return [], [], [], []
 
@@ -440,10 +463,7 @@ def register_callbacks(app, df, historico):
             historico["Cargo"] == cargo
         ].copy()
 
-        # ----------------------------------------------------
-        # SUBGRUPO
-        # ----------------------------------------------------
-
+        # Subgrupo
         subgrupos = (
             dados["Subgrupo"]
             .dropna()
@@ -451,7 +471,6 @@ def register_callbacks(app, df, historico):
         )
 
         if len(subgrupos) > 0:
-
             if not subgrupo:
                 return [], [], [], []
 
@@ -459,21 +478,28 @@ def register_callbacks(app, df, historico):
                 dados["Subgrupo"] == subgrupo
             ]
 
-        # ----------------------------------------------------
-        # REDE
-        # ----------------------------------------------------
-
+        # Rede social
         dados = dados[
             dados["Social network"] == rede
         ].copy()
 
+        # Ranking calculado com os seguidores atuais
+        top_perfis = obter_top_perfis_por_seguidores(
+            df,
+            cargo=cargo,
+            subgrupo=subgrupo,
+            rede=rede,
+            top_n=top_n,
+        )
+
+        dados = dados[
+            dados["Profile_padronizado"].isin(top_perfis)
+        ]
+
         if dados.empty:
             return [], [], [], []
 
-        # ----------------------------------------------------
-        # CANDIDATOS
-        # ----------------------------------------------------
-
+        # Candidatos
         candidatos = sorted(
             dados["Profile_padronizado"]
             .dropna()
@@ -481,21 +507,13 @@ def register_callbacks(app, df, historico):
         )
 
         opcoes_candidatos = [
-            {
-                "label": candidato,
-                "value": candidato
-            }
-            for candidato in candidatos
+            {"label": nome, "value": nome}
+            for nome in candidatos
         ]
 
-        # ----------------------------------------------------
-        # PERÍODOS
-        # ----------------------------------------------------
-
+        # Períodos disponíveis para o Top N
         periodos = (
-            dados[
-                ["Data_Inicio", "Data_Fim"]
-            ]
+            dados[["Data_Inicio", "Data_Fim"]]
             .dropna()
             .drop_duplicates()
             .sort_values("Data_Inicio")
@@ -504,7 +522,6 @@ def register_callbacks(app, df, historico):
         opcoes_periodos = []
 
         for _, periodo in periodos.iterrows():
-
             inicio = periodo["Data_Inicio"]
             fim = periodo["Data_Fim"]
 
@@ -545,6 +562,7 @@ def register_callbacks(app, df, historico):
         Input("filtro_cargo", "value"),
         Input("filtro_subgrupo", "value"),
         Input("filtro_rede", "value"),
+        Input("filtro_top_n", "value"),
         Input("filtro_candidato", "value"),
         Input("filtro_periodo", "value")
     )
@@ -552,6 +570,7 @@ def register_callbacks(app, df, historico):
         cargo,
         subgrupo,
         rede,
+        top_n,
         candidatos,
         periodos
     ):
@@ -595,6 +614,22 @@ def register_callbacks(app, df, historico):
                     candidatos
                 )
             ]
+
+        # ----------------------------------------------------
+        # TOP N POR SEGUIDORES ATUAIS
+        # ----------------------------------------------------
+
+        top_perfis = obter_top_perfis_por_seguidores(
+            df,
+            cargo=cargo,
+            subgrupo=subgrupo,
+            rede=rede,
+            top_n=top_n,
+        )
+
+        dados = dados[
+            dados["Profile_padronizado"].isin(top_perfis)
+        ]
 
         # ----------------------------------------------------
         # PERÍODOS
@@ -682,12 +717,14 @@ def register_callbacks(app, df, historico):
         Input("filtro_cargo", "value"),
         Input("filtro_subgrupo", "value"),
         Input("filtro_rede", "value"),
+        Input("filtro_top_n", "value"),
         Input("filtro_candidato", "value")
     )
     def atualizar_desempenho_atual(
         cargo,
         subgrupo,
         rede,
+        top_n,
         candidatos
     ):
 
@@ -719,6 +756,22 @@ def register_callbacks(app, df, historico):
             dados = dados[
                 dados["Social network"] == rede
             ]
+
+        # ----------------------------------------------------
+        # TOP N POR SEGUIDORES
+        # ----------------------------------------------------
+
+        top_perfis = obter_top_perfis_por_seguidores(
+            df,
+            cargo=cargo,
+            subgrupo=subgrupo,
+            rede=rede,
+            top_n=top_n,
+        )
+
+        dados = dados[
+            dados["Profile_padronizado"].isin(top_perfis)
+        ]
 
         # ----------------------------------------------------
         # CANDIDATOS
