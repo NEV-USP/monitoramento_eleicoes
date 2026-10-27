@@ -4,7 +4,7 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy import text
 
-from database.connection import engine
+from database.connection import obter_engine
 from database.preprocess import (
     preparar_metrics,
     localizar_arquivo,
@@ -272,7 +272,8 @@ def importar_metricas_perfil_dataframe(
     grupo,
     subgrupo,
     data_inicio,
-    data_fim
+    data_fim,
+    schema="public"
 ):
     """
     Importa métricas de perfil a partir de um DataFrame
@@ -338,7 +339,7 @@ def importar_metricas_perfil_dataframe(
     # Banco
     # --------------------------------------------------------
 
-    with engine.begin() as connection:
+    with obter_engine(schema).begin() as connection:
 
         # ----------------------------------------------------
         # Coleta
@@ -542,7 +543,7 @@ def importar_metricas_perfil_dataframe(
 # IMPORTAÇÃO VIA PASTA LOCAL
 # ============================================================
 
-def importar_metricas_perfil(pasta):
+def importar_metricas_perfil(pasta, schema="public"):
 
     pasta = Path(pasta)
 
@@ -595,6 +596,7 @@ def importar_metricas_perfil(pasta):
         subgrupo=subgrupo,
         data_inicio=periodo["data_inicio"],
         data_fim=periodo["data_fim"],
+        schema=schema
     )
 
 
@@ -603,11 +605,15 @@ def importar_metricas_perfil(pasta):
 # ============================================================
 
 if __name__ == "__main__":
-
     pasta = input(
         "Digite o caminho da pasta semanal: "
     ).strip()
 
+    schema = input(
+        "Schema [public/monitoramento_extra] (padrão: public): "
+    ).strip() or "public"
+
     importar_metricas_perfil(
-        pasta
+        pasta=pasta,
+        schema=schema,
     )

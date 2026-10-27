@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from database._import_coletas import importar_coleta
+from database.deprecated._import_coletas import importar_coleta
 from database.import_perfis import importar_perfis
 from database.import_metricas_perfil import importar_metricas_perfil
 from database.import_posts import importar_posts

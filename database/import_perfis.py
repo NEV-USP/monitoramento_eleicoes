@@ -3,7 +3,7 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy import text
 
-from database.connection import engine
+from database.connection import obter_engine
 from database.preprocess import (
     preparar_metrics,
     localizar_arquivo,
@@ -15,23 +15,33 @@ from database.preprocess import (
 # ============================================================
 
 def identificar_cargo(grupo):
-    """
-    Converte o grupo da coleta para o cargo.
-    """
+    """Converte o grupo da coleta em uma categoria de monitoramento."""
 
     mapa = {
+        # Schema public
         "Presidenciáveis": "Presidente",
         "Senado": "Senador",
         "Governos": "Governador",
         "Deputados Federais": "Deputado Federal",
+
+        # Schema monitoramento_extra
+        "Candidatas racializadas para deputadas federais":
+            "Candidatas racializadas para deputadas federais",
+        "Candidatos jovens": "Candidatos jovens",
+        "Candidatos professores": "Candidatos professores",
+        "Fact-Checking": "Fact-Checking",
+        "Jornalistas": "Jornalistas",
+        "Mídias Hegemônicas e Nativas Digitais":
+            "Mídias Hegemônicas e Nativas Digitais",
+        "Misoginia": "Misoginia",
+        "Newsfluencer": "Newsfluencer",
     }
 
     grupo = grupo.strip()
 
     if grupo not in mapa:
         raise ValueError(
-            f"Grupo não reconhecido para identificação do cargo: "
-            f"{grupo}"
+            f"Grupo não reconhecido para identificação da categoria: {grupo}"
         )
 
     return mapa[grupo]
@@ -113,6 +123,7 @@ def importar_candidatos(
         {
             "profile_padronizado": profile,
             "cargo": cargo,
+            "tipo_entidade": "candidato",
         }
         for profile in profiles
     ]
@@ -120,17 +131,20 @@ def importar_candidatos(
     sql = text("""
         INSERT INTO candidatos (
             profile_padronizado,
-            cargo
+            cargo,
+            tipo_entidade
         )
         VALUES (
             :profile_padronizado,
-            :cargo
+            :cargo,
+            :tipo_entidade
         )
         ON CONFLICT (
             profile_padronizado,
-            cargo
+            cargo,
+            tipo_entidade
         )
-        DO NOTHING
+        DO NOTHING;
     """)
 
     connection.execute(
@@ -329,7 +343,8 @@ def importar_perfis_sociais(
 
 def importar_perfis_dataframe(
     metrics,
-    grupo
+    grupo,
+    schema="public"
 ):
     """
     Importa candidatos e perfis sociais a partir de um
@@ -399,19 +414,15 @@ def importar_perfis_dataframe(
         grupo
     )
 
-    print(
-        f"Grupo: {grupo}"
-    )
-
-    print(
-        f"Cargo: {cargo}"
-    )
+    print(f"Schema: {schema}")
+    print(f"Grupo: {grupo}")
+    print(f"Categoria: {cargo}")
 
     # --------------------------------------------------------
     # Banco
     # --------------------------------------------------------
 
-    with engine.begin() as connection:
+    with obter_engine(schema).begin() as connection:
 
         # ----------------------------------------------------
         # Candidatos
@@ -467,7 +478,7 @@ def importar_perfis_dataframe(
 # IMPORTAÇÃO VIA PASTA LOCAL
 # ============================================================
 
-def importar_perfis(pasta):
+def importar_perfis(pasta, schema="public"):
 
     pasta = Path(pasta)
 
@@ -562,7 +573,8 @@ def importar_perfis(pasta):
 
     importar_perfis_dataframe(
         metrics,
-        grupo
+        grupo,
+        schema
     )
 
 
@@ -571,11 +583,15 @@ def importar_perfis(pasta):
 # ============================================================
 
 if __name__ == "__main__":
-
     pasta = input(
         "Digite o caminho da pasta semanal: "
     ).strip()
 
+    schema = input(
+        "Schema [public/monitoramento_extra] (padrão: public): "
+    ).strip() or "public"
+
     importar_perfis(
-        pasta
+        pasta=pasta,
+        schema=schema,
     )

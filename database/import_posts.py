@@ -4,7 +4,7 @@ import pandas as pd
 
 from sqlalchemy import text, bindparam
 
-from database.connection import engine
+from database.connection import obter_engine
 from database.preprocess import (
     preparar_posts,
     localizar_arquivo,
@@ -419,6 +419,7 @@ def importar_posts_dataframe(
     subgrupo,
     data_inicio,
     data_fim,
+    schema="public"
 ):
     """
     Importa posts a partir de um DataFrame já preparado.
@@ -431,7 +432,7 @@ def importar_posts_dataframe(
         f"Registros encontrados: {len(posts_df)}"
     )
 
-    with engine.begin() as connection:
+    with obter_engine(schema).begin() as connection:
 
         coleta_id = buscar_coleta(
             connection,
@@ -528,7 +529,7 @@ def importar_posts_dataframe(
     )
 
 
-def importar_posts(pasta):
+def importar_posts(pasta, schema="public"):
     """
     Mantém o fluxo de importação local.
 
@@ -565,6 +566,7 @@ def importar_posts(pasta):
         subgrupo=subgrupo,
         data_inicio=periodo["data_inicio"],
         data_fim=periodo["data_fim"],
+        schema=schema
     )
 
 
@@ -574,4 +576,12 @@ if __name__ == "__main__":
         "Digite o caminho da pasta semanal: "
     ).strip()
 
-    importar_posts(pasta)
+    schema = input(
+        "Digite o schema (public ou monitoramento_extra) "
+        "[public]: "
+    ).strip() or "public"
+
+    importar_posts(
+        pasta=pasta,
+        schema=schema,
+    )

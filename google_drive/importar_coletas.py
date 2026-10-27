@@ -6,7 +6,7 @@ from datetime import date
 from dotenv import load_dotenv
 from sqlalchemy import text
 
-from database.connection import engine
+from database.connection import obter_engine
 from database.preprocess import (
     preparar_metrics_dataframe,
     preparar_posts_dataframe,
@@ -41,7 +41,6 @@ ROOT_FOLDER_ID = os.getenv(
     "GOOGLE_DRIVE_FOLDER_ID"
 )
 
-
 GRUPOS = {
     "Presidenciáveis",
     "Senado",
@@ -49,33 +48,43 @@ GRUPOS = {
     "Deputados Federais",
 }
 
-def buscar_status_coleta(coleta_id):
+GRUPOS_EXTRAS = {
+    "Candidatas racializadas para deputadas federais",
+    "Candidatos jovens",
+    "Candidatos professores",
+    "Fact-Checking",
+    "Jornalistas",
+    "Mídias Hegemônicas e Nativas Digitais",
+    "Misoginia",
+    "Newsfluencer"
+}
+
+GRUPOS_POR_SCHEMA = {
+    "public": GRUPOS,
+    "monitoramento_extra": GRUPOS_EXTRAS,
+}
+
+def buscar_status_coleta(coleta_id, schema="public"):
     sql = text("""
         SELECT status_importacao
         FROM coletas
         WHERE id = :id
     """)
 
-    with engine.connect() as connection:
+    with obter_engine(schema).connect() as connection:
         resultado = connection.execute(
             sql,
             {"id": coleta_id}
         ).fetchone()
 
-    if resultado is None:
-        return None
-
-    return resultado[0]
+    return resultado[0] if resultado else None
 
 def atualizar_status_coleta(
     coleta_id,
     status,
     mensagem_erro=None,
+    schema="public",
 ):
-    """
-    Atualiza o status de processamento de uma coleta.
-    """
-
     sql = text("""
         UPDATE coletas
         SET
@@ -85,7 +94,7 @@ def atualizar_status_coleta(
         WHERE id = :id
     """)
 
-    with engine.begin() as connection:
+    with obter_engine(schema).begin() as connection:
         connection.execute(
             sql,
             {
@@ -96,27 +105,28 @@ def atualizar_status_coleta(
         )
 
 
-def marcar_processando(coleta_id):
+def marcar_processando(coleta_id, schema="public"):
     atualizar_status_coleta(
-        coleta_id=coleta_id,
-        status="PROCESSANDO",
-        mensagem_erro=None,
+        coleta_id,
+        "PROCESSANDO",
+        schema=schema,
     )
 
 
-def marcar_concluida(coleta_id):
+def marcar_concluida(coleta_id, schema="public"):
     atualizar_status_coleta(
-        coleta_id=coleta_id,
-        status="CONCLUIDA",
-        mensagem_erro=None,
+        coleta_id,
+        "CONCLUIDA",
+        schema=schema,
     )
 
 
-def marcar_erro(coleta_id, erro):
+def marcar_erro(coleta_id, erro, schema="public"):
     atualizar_status_coleta(
-        coleta_id=coleta_id,
-        status="ERRO",
+        coleta_id,
+        "ERRO",
         mensagem_erro=str(erro),
+        schema=schema,
     )
 
 def extrair_periodo_nome(nome):
@@ -195,6 +205,7 @@ def criar_coleta(
     data_fim,
     benchmarking_arquivo,
     content_arquivo,
+    schema="public"
 ):
     sql_busca = text("""
         SELECT id
@@ -205,7 +216,7 @@ def criar_coleta(
           AND data_fim = :data_fim
     """)
 
-    with engine.begin() as connection:
+    with obter_engine(schema).begin() as connection:
 
         resultado = connection.execute(
             sql_busca,
@@ -324,7 +335,7 @@ def encontrar_arquivos_semana(semana_id):
     return benchmarking[0], content[0]
 
 
-def importar_semana(grupo, subgrupo, semana):
+def importar_semana(grupo, subgrupo, semana, schema="public"):
     nome_semana = semana["name"]
 
     print("\n" + "=" * 70)
@@ -345,9 +356,10 @@ def importar_semana(grupo, subgrupo, semana):
         data_fim=periodo["data_fim"],
         benchmarking_arquivo=benchmarking["name"],
         content_arquivo=content["name"],
+        schema=schema
     )
 
-    status_atual = buscar_status_coleta(coleta_id)
+    status_atual = buscar_status_coleta(coleta_id, schema)
 
     if status_atual == "CONCLUIDA":
         print(
@@ -363,7 +375,7 @@ def importar_semana(grupo, subgrupo, semana):
         )
         return
 
-    marcar_processando(coleta_id)
+    marcar_processando(coleta_id, schema)
 
     try:
         # --------------------------------------------------
@@ -389,7 +401,8 @@ def importar_semana(grupo, subgrupo, semana):
 
         importar_perfis_dataframe(
             metrics=metrics,
-            grupo=grupo
+            grupo=grupo,
+            schema=schema
         )
 
         importar_metricas_perfil_dataframe(
@@ -398,6 +411,7 @@ def importar_semana(grupo, subgrupo, semana):
             subgrupo=subgrupo,
             data_inicio=periodo["data_inicio"],
             data_fim=periodo["data_fim"],
+            schema=schema
         )
 
         # --------------------------------------------------
@@ -427,9 +441,10 @@ def importar_semana(grupo, subgrupo, semana):
             subgrupo=subgrupo,
             data_inicio=periodo["data_inicio"],
             data_fim=periodo["data_fim"],
+            schema=schema
         )
 
-        marcar_concluida(coleta_id)
+        marcar_concluida(coleta_id, schema)
 
         print(
             f"✓ Coleta {coleta_id} concluída com sucesso."
@@ -438,7 +453,8 @@ def importar_semana(grupo, subgrupo, semana):
     except Exception as erro:
         marcar_erro(
             coleta_id,
-            erro
+            erro,
+            schema
         )
 
         print(
@@ -452,6 +468,7 @@ def processar_subgrupo(
     grupo,
     subgrupo,
     pasta_id,
+    schema="public"
 ):
     """
     Processa todas as semanas de um subgrupo.
@@ -491,6 +508,7 @@ def processar_subgrupo(
                 grupo=grupo,
                 subgrupo=subgrupo,
                 semana=semana,
+                schema=schema
             )
 
         except Exception as erro:
@@ -514,6 +532,7 @@ def processar_subgrupo(
 def processar_grupo(
     grupo,
     pasta_id,
+    schema="public"
 ):
     """
     Processa um grupo do Google Drive.
@@ -579,6 +598,7 @@ def processar_grupo(
                     grupo=grupo,
                     subgrupo=None,
                     semana=semana,
+                    schema=schema
                 )
 
             except Exception as erro:
@@ -605,7 +625,9 @@ def processar_grupo(
             grupo=grupo,
             subgrupo=subgrupo["name"],
             pasta_id=subgrupo["id"],
+            schema=schema
         )
+
 
 
 def main():
@@ -620,25 +642,22 @@ def main():
     print("IMPORTAÇÃO DE COLETAS DO GOOGLE DRIVE")
     print("=" * 70)
 
-    print(
-        f"Folder ID: {ROOT_FOLDER_ID}"
-    )
+    print(f"Folder ID: {ROOT_FOLDER_ID}")
 
     # ==============================================================
     # LOCALIZAR "COLETAS"
     # ==============================================================
 
-    pastas = listar_pastas(
-        ROOT_FOLDER_ID
+    pastas = listar_pastas(ROOT_FOLDER_ID)
+
+    coletas = next(
+        (
+            pasta
+            for pasta in pastas
+            if pasta["name"].lower() == "coletas"
+        ),
+        None,
     )
-
-    coletas = None
-
-    for pasta in pastas:
-
-        if pasta["name"].lower() == "coletas":
-            coletas = pasta
-            break
 
     if coletas is None:
         raise ValueError(
@@ -646,44 +665,58 @@ def main():
             "no Google Drive."
         )
 
-    print(
-        f"Pasta Coletas: "
-        f"{coletas['id']}"
-    )
+    print(f"Pasta Coletas: {coletas['id']}")
 
     # ==============================================================
-    # LOCALIZAR GRUPOS
+    # INDEXAR GRUPOS DISPONÍVEIS NO DRIVE
     # ==============================================================
 
-    grupos = listar_pastas(
-        coletas["id"]
-    )
+    pastas_grupos = listar_pastas(coletas["id"])
 
-    grupos = [
-        grupo
-        for grupo in grupos
-        if grupo["name"] in GRUPOS
-    ]
-
-    grupos.sort(
-        key=lambda x: x["name"]
-    )
-
-    print(
-        f"Grupos encontrados: "
-        f"{len(grupos)}"
-    )
+    pastas_por_nome = {
+        pasta["name"]: pasta
+        for pasta in pastas_grupos
+    }
 
     # ==============================================================
-    # PROCESSAR GRUPOS
+    # PROCESSAR OS GRUPOS DE CADA SCHEMA
     # ==============================================================
 
-    for grupo in grupos:
+    for schema, grupos_schema in GRUPOS_POR_SCHEMA.items():
 
-        processar_grupo(
-            grupo=grupo["name"],
-            pasta_id=grupo["id"],
+        print()
+        print("#" * 70)
+        print(f"SCHEMA: {schema}")
+        print("#" * 70)
+
+        grupos_encontrados = [
+            pastas_por_nome[nome]
+            for nome in sorted(grupos_schema)
+            if nome in pastas_por_nome
+        ]
+
+        ausentes = grupos_schema - set(pastas_por_nome)
+
+        if ausentes:
+            print(
+                "Grupos não encontrados no Drive: "
+                + ", ".join(sorted(ausentes))
+            )
+
+        print(
+            f"Grupos encontrados: {len(grupos_encontrados)}"
         )
+
+        for grupo in grupos_encontrados:
+            processar_grupo(
+                grupo=grupo["name"],
+                pasta_id=grupo["id"],
+                schema=schema,
+            )
+
+    # ==============================================================
+    # FINALIZAÇÃO
+    # ==============================================================
 
     print()
     print("=" * 70)
