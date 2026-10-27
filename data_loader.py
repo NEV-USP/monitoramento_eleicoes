@@ -4,7 +4,7 @@ import re
 
 from sqlalchemy import text
 
-from database.connection import engine
+from database.connection import obter_engine
 
 
 # ============================================================
@@ -32,7 +32,7 @@ def normalizar_nome(nome):
 # DADOS GERAIS
 # ============================================================
 
-def carregar_dados_gerais():
+def carregar_dados_gerais(schema="public"):
     sql = text("""
         WITH metricas_recentes AS (
             SELECT
@@ -107,7 +107,7 @@ def carregar_dados_gerais():
         WHERE mr.rn = 1
     """)
 
-    with engine.connect() as connection:
+    with obter_engine(schema).connect() as connection:
         df = pd.read_sql(sql, connection)
 
     df["Seguidores"] = (
@@ -142,6 +142,8 @@ def carregar_dados_gerais():
         .apply(normalizar_nome)
     )
 
+    df["Fonte"] = schema
+
     return df
 
 
@@ -149,7 +151,7 @@ def carregar_dados_gerais():
 # POSTS
 # ============================================================
 
-def carregar_posts():
+def carregar_posts(schema="public"):
     sql = text("""
         SELECT
             p.id AS "Post-ID",
@@ -203,7 +205,7 @@ def carregar_posts():
             p.data DESC NULLS LAST
     """)
 
-    with engine.connect() as connection:
+    with obter_engine(schema).connect() as connection:
         posts = pd.read_sql(sql, connection)
 
     # --------------------------------------------------------
@@ -268,10 +270,12 @@ def carregar_posts():
         .apply(normalizar_nome)
     )
 
+    posts["Fonte"] = schema
+
     return posts
 
 
-def carregar_historico():
+def carregar_historico(schema="public"):
     sql = text("""
         SELECT
             c.profile_padronizado AS "Profile_padronizado",
@@ -322,7 +326,7 @@ def carregar_historico():
             ps.network
     """)
 
-    with engine.connect() as connection:
+    with obter_engine(schema).connect() as connection:
         df = pd.read_sql(sql, connection)
 
     colunas_numericas = [
@@ -352,5 +356,7 @@ def carregar_historico():
         df["Data_Fim"],
         errors="coerce"
     )
+
+    df["Fonte"] = schema
 
     return df

@@ -60,7 +60,7 @@ def criar_grafico_temporal(
     fig.update_layout(
         xaxis_title="Período",
         yaxis_title=ylabel or coluna,
-        legend_title="Candidato",
+        legend_title="Perfil",
         hovermode="x unified"
     )
 
@@ -101,13 +101,26 @@ def layout(redes, cargos):
                 }
             ),
 
+            html.Div([
+                html.Label("Conjunto de dados", style=FILTER_LABEL_STYLE),
+                dcc.Dropdown(
+                    id="filtro_fonte",
+                    options=[
+                        {"label": "Monitoramento eleitoral", "value": "public"},
+                        {"label": "Grupos de monitoramento", "value": "monitoramento_extra"},
+                    ],
+                    value="public",
+                    clearable=False,
+                ),
+            ], style={"marginBottom": "15px"}),
+
             # ------------------------------------------------
             # CARGO
             # ------------------------------------------------
 
             html.Div([
                 html.Label(
-                    "Cargo",
+                    "Grupo",
                     style=FILTER_LABEL_STYLE
                 ),
 
@@ -205,7 +218,7 @@ def layout(redes, cargos):
             html.Div([
 
                 html.Label(
-                    "Candidato",
+                    "Perfil",
                     style=FILTER_LABEL_STYLE
                 ),
 
@@ -215,7 +228,7 @@ def layout(redes, cargos):
                     value=[],
                     multi=True,
                     clearable=True,
-                    placeholder="Selecione um ou mais candidatos"
+                    placeholder="Selecione um ou mais perfis"
                 )
 
             ], style={"marginBottom": "15px"}),
@@ -319,6 +332,27 @@ def layout(redes, cargos):
 
 def register_callbacks(app, df, historico):
 
+    @app.callback(
+        Output("filtro_cargo", "options"),
+        Output("filtro_cargo", "value"),
+        Input("filtro_fonte", "value"),
+    )
+    def atualizar_cargos(fonte):
+        dados = df[df["Fonte"] == fonte].copy()
+
+        cargos_disponiveis = sorted(
+            dados["Cargo"].dropna().unique()
+        )
+
+        opcoes = [
+            {"label": cargo, "value": cargo}
+            for cargo in cargos_disponiveis
+        ]
+
+        valor = cargos_disponiveis[0] if cargos_disponiveis else None
+
+        return opcoes, valor
+
     # ========================================================
     # 1. CARGO → SUBGRUPO
     # ========================================================
@@ -327,51 +361,31 @@ def register_callbacks(app, df, historico):
         Output("container_subgrupo", "style"),
         Output("filtro_subgrupo", "options"),
         Output("filtro_subgrupo", "value"),
-
-        Input("filtro_cargo", "value")
+        Input("filtro_fonte", "value"),
+        Input("filtro_cargo", "value"),
     )
-    def atualizar_subgrupos(cargo):
-
-        if not cargo:
-            return (
-                {"display": "none"},
-                [],
-                None
-            )
-
+    def atualizar_subgrupos(fonte, cargo):
         dados = historico[
-            historico["Cargo"] == cargo
+            (historico["Fonte"] == fonte)
+            & (historico["Cargo"] == cargo)
         ].copy()
 
         subgrupos = sorted(
-            dados["Subgrupo"]
-            .dropna()
-            .unique()
+            dados["Subgrupo"].dropna().unique()
         )
 
-        # Cargo sem subgrupo
         if not subgrupos:
-            return (
-                {"display": "none"},
-                [],
-                None
-            )
+            return {"display": "none"}, [], None
 
         opcoes = [
-            {
-                "label": subgrupo,
-                "value": subgrupo
-            }
+            {"label": subgrupo, "value": subgrupo}
             for subgrupo in subgrupos
         ]
 
         return (
-            {
-                "display": "block",
-                "marginBottom": "15px"
-            },
+            {"display": "block", "marginBottom": "15px"},
             opcoes,
-            subgrupos[0]
+            subgrupos[0],
         )
 
 
@@ -382,56 +396,30 @@ def register_callbacks(app, df, historico):
     @app.callback(
         Output("filtro_rede", "options"),
         Output("filtro_rede", "value"),
-
+        Input("filtro_fonte", "value"),
         Input("filtro_cargo", "value"),
-        Input("filtro_subgrupo", "value")
+        Input("filtro_subgrupo", "value"),
     )
-    def atualizar_redes(cargo, subgrupo):
-
-        if not cargo:
-            return [], None
-
+    def atualizar_redes(fonte, cargo, subgrupo):
         dados = historico[
-            historico["Cargo"] == cargo
+            (historico["Fonte"] == fonte)
+            & (historico["Cargo"] == cargo)
         ].copy()
 
-        # Se o cargo possuir subgrupo, aplica o filtro.
-        subgrupos = (
-            dados["Subgrupo"]
-            .dropna()
-            .unique()
-        )
+        subgrupos_disponiveis = dados["Subgrupo"].dropna().unique()
 
-        if len(subgrupos) > 0:
-
+        if len(subgrupos_disponiveis) > 0:
             if not subgrupo:
                 return [], None
 
-            dados = dados[
-                dados["Subgrupo"] == subgrupo
-            ]
+            dados = dados[dados["Subgrupo"] == subgrupo]
 
-        redes_disponiveis = sorted(
-            dados["Social network"]
-            .dropna()
-            .unique()
+        redes = sorted(dados["Social network"].dropna().unique())
+
+        return (
+            [{"label": rede, "value": rede} for rede in redes],
+            redes[0] if redes else None,
         )
-
-        opcoes = [
-            {
-                "label": rede,
-                "value": rede
-            }
-            for rede in redes_disponiveis
-        ]
-
-        valor = (
-            redes_disponiveis[0]
-            if redes_disponiveis
-            else None
-        )
-
-        return opcoes, valor
 
 
     # ========================================================
@@ -445,17 +433,20 @@ def register_callbacks(app, df, historico):
         Output("filtro_periodo", "options"),
         Output("filtro_periodo", "value"),
 
+        Input("filtro_fonte", "value"),
         Input("filtro_cargo", "value"),
         Input("filtro_subgrupo", "value"),
         Input("filtro_rede", "value"),
-        Input("filtro_top_n", "value")
+        Input("filtro_top_n", "value"),
     )
     def atualizar_candidatos_periodos(
-        cargo,
-        subgrupo,
-        rede,
-        top_n
+        fonte, cargo, subgrupo, rede, top_n
     ):
+        dados = historico[
+            (historico["Fonte"] == fonte)
+            & (historico["Cargo"] == cargo)
+        ].copy()
+
         if not cargo or not rede:
             return [], [], [], []
 
@@ -484,8 +475,10 @@ def register_callbacks(app, df, historico):
         ].copy()
 
         # Ranking calculado com os seguidores atuais
+        df_fonte = df[df["Fonte"] == fonte]
+
         top_perfis = obter_top_perfis_por_seguidores(
-            df,
+            df_fonte,
             cargo=cargo,
             subgrupo=subgrupo,
             rede=rede,
@@ -559,6 +552,7 @@ def register_callbacks(app, df, historico):
             "figure"
         ),
 
+        Input("filtro_fonte", "value"),
         Input("filtro_cargo", "value"),
         Input("filtro_subgrupo", "value"),
         Input("filtro_rede", "value"),
@@ -567,6 +561,7 @@ def register_callbacks(app, df, historico):
         Input("filtro_periodo", "value")
     )
     def atualizar_graficos_temporais(
+        fonte,
         cargo,
         subgrupo,
         rede,
@@ -575,7 +570,11 @@ def register_callbacks(app, df, historico):
         periodos
     ):
 
-        dados = historico.copy()
+        dados = historico[
+            historico["Fonte"] == fonte
+        ].copy()
+
+        df_fonte = df[df["Fonte"] == fonte]
 
         # ----------------------------------------------------
         # CARGO
@@ -620,7 +619,7 @@ def register_callbacks(app, df, historico):
         # ----------------------------------------------------
 
         top_perfis = obter_top_perfis_por_seguidores(
-            df,
+            df_fonte,
             cargo=cargo,
             subgrupo=subgrupo,
             rede=rede,
@@ -714,6 +713,7 @@ def register_callbacks(app, df, historico):
             "figure"
         ),
 
+        Input("filtro_fonte", "value"),
         Input("filtro_cargo", "value"),
         Input("filtro_subgrupo", "value"),
         Input("filtro_rede", "value"),
@@ -721,6 +721,7 @@ def register_callbacks(app, df, historico):
         Input("filtro_candidato", "value")
     )
     def atualizar_desempenho_atual(
+        fonte,
         cargo,
         subgrupo,
         rede,
@@ -728,7 +729,7 @@ def register_callbacks(app, df, historico):
         candidatos
     ):
 
-        dados = df.copy()
+        dados = df[df["Fonte"] == fonte].copy()
 
         # ----------------------------------------------------
         # CARGO
@@ -761,8 +762,9 @@ def register_callbacks(app, df, historico):
         # TOP N POR SEGUIDORES
         # ----------------------------------------------------
 
+        df_fonte = df[df["Fonte"] == fonte]
         top_perfis = obter_top_perfis_por_seguidores(
-            df,
+            df_fonte,
             cargo=cargo,
             subgrupo=subgrupo,
             rede=rede,
@@ -819,7 +821,7 @@ def register_callbacks(app, df, historico):
         )
 
         grafico_seguidores.update_layout(
-            xaxis_title="Candidato",
+            xaxis_title="Perfil",
             yaxis_title="Seguidores"
         )
 
@@ -840,7 +842,7 @@ def register_callbacks(app, df, historico):
         )
 
         grafico_interacoes.update_layout(
-            xaxis_title="Candidato",
+            xaxis_title="Perfil",
             yaxis_title="Interações"
         )
 
@@ -861,7 +863,7 @@ def register_callbacks(app, df, historico):
         )
 
         grafico_engajamento.update_layout(
-            xaxis_title="Candidato",
+            xaxis_title="Perfil",
             yaxis_title="Engajamento"
         )
 
@@ -904,7 +906,7 @@ def register_callbacks(app, df, historico):
             dados_heatmap,
             text_auto=True,
             aspect="auto",
-            title="Indicadores por candidato"
+            title="Indicadores por perfil"
         )
 
         # ====================================================
@@ -962,7 +964,7 @@ def register_callbacks(app, df, historico):
                 "Interacoes"
             ],
             barmode="group",
-            title="Desempenho por Cargo"
+            title="Desempenho por Grupo"
         )
 
         return (

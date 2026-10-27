@@ -209,6 +209,28 @@ def layout():
                 }
             ),
 
+            html.Div([
+                html.Label(
+                    "Conjunto de dados",
+                    style=FILTER_LABEL_STYLE
+                ),
+                dcc.Dropdown(
+                    id="posts_filtro_fonte",
+                    options=[
+                        {
+                            "label": "Monitoramento eleitoral",
+                            "value": "public"
+                        },
+                        {
+                            "label": "Grupos de monitoramento",
+                            "value": "monitoramento_extra"
+                        }
+                    ],
+                    value="public",
+                    clearable=False
+                )
+            ], style={"marginBottom": "15px"}),
+
             # ------------------------------------------------
             # CARGO
             # ------------------------------------------------
@@ -216,7 +238,7 @@ def layout():
             html.Div([
 
                 html.Label(
-                    "Cargo",
+                    "Grupo",
                     style=FILTER_LABEL_STYLE
                 ),
 
@@ -302,7 +324,7 @@ def layout():
             html.Div([
 
                 html.Label(
-                    "Candidato",
+                    "Perfil",
                     style=FILTER_LABEL_STYLE
                 ),
 
@@ -312,7 +334,7 @@ def layout():
                     value=[],
                     multi=True,
                     clearable=True,
-                    placeholder="Selecione um ou mais candidatos"
+                    placeholder="Selecione um ou mais perfis"
                 )
 
             ], style={"marginBottom": "15px"}),
@@ -421,7 +443,7 @@ def layout():
 
                 columns=[
                     {
-                        "name": "Candidato",
+                        "name": "Perfil",
                         "id": "Profile_padronizado"
                     },
                     {
@@ -512,332 +534,162 @@ def layout():
 def register_callbacks(app, posts, df_atual):
 
     # ========================================================
-    # 1. INICIALIZA CARGOS
+    # 1. ORIGEM → CARGOS
     # ========================================================
 
     @app.callback(
-        Output(
-            "posts_filtro_cargo",
-            "options"
-        ),
-        Output(
-            "posts_filtro_cargo",
-            "value"
-        ),
-        Input(
-            "posts_filtro_cargo",
-            "id"
-        )
+        Output("posts_filtro_cargo", "options"),
+        Output("posts_filtro_cargo", "value"),
+        Input("posts_filtro_fonte", "value"),
     )
-    def inicializar_cargos(_):
+    def inicializar_cargos(fonte):
+        dados = posts[posts["Fonte"] == fonte]
 
-        cargos = sorted(
-            posts["Cargo"]
-            .dropna()
-            .unique()
-        )
-
-        opcoes = [
-            {
-                "label": cargo,
-                "value": cargo
-            }
-            for cargo in cargos
-        ]
-
-        valor = (
-            cargos[0]
-            if cargos
-            else None
-        )
-
-        return opcoes, valor
-
-
-    # ========================================================
-    # 2. CARGO → SUBGRUPO
-    # ========================================================
-
-    @app.callback(
-        Output(
-            "posts_container_subgrupo",
-            "style"
-        ),
-        Output(
-            "posts_filtro_subgrupo",
-            "options"
-        ),
-        Output(
-            "posts_filtro_subgrupo",
-            "value"
-        ),
-
-        Input(
-            "posts_filtro_cargo",
-            "value"
-        )
-    )
-    def atualizar_subgrupos(cargo):
-
-        if not cargo:
-            return (
-                {"display": "none"},
-                [],
-                None
-            )
-
-        dados = posts[
-            posts["Cargo"] == cargo
-        ]
-
-        subgrupos = sorted(
-            dados["Subgrupo"]
-            .dropna()
-            .unique()
-        )
-
-        if not subgrupos:
-
-            return (
-                {"display": "none"},
-                [],
-                None
-            )
-
-        opcoes = [
-            {
-                "label": subgrupo,
-                "value": subgrupo
-            }
-            for subgrupo in subgrupos
-        ]
+        cargos = sorted(dados["Cargo"].dropna().unique())
 
         return (
-            {
-                "display": "block",
-                "marginBottom": "15px"
-            },
-            opcoes,
-            subgrupos[0]
+            [{"label": cargo, "value": cargo} for cargo in cargos],
+            cargos[0] if cargos else None,
         )
 
 
     # ========================================================
-    # 3. CARGO + SUBGRUPO → REDE
+    # 2. ORIGEM + CARGO → SUBGRUPOS
     # ========================================================
 
     @app.callback(
-        Output(
-            "posts_filtro_rede",
-            "options"
-        ),
-        Output(
-            "posts_filtro_rede",
-            "value"
-        ),
-
-        Input(
-            "posts_filtro_cargo",
-            "value"
-        ),
-        Input(
-            "posts_filtro_subgrupo",
-            "value"
-        )
+        Output("posts_container_subgrupo", "style"),
+        Output("posts_filtro_subgrupo", "options"),
+        Output("posts_filtro_subgrupo", "value"),
+        Input("posts_filtro_fonte", "value"),
+        Input("posts_filtro_cargo", "value"),
     )
-    def atualizar_redes(
-        cargo,
-        subgrupo
-    ):
-
-        if not cargo:
-            return [], None
-
+    def atualizar_subgrupos(fonte, cargo):
         dados = posts[
-            posts["Cargo"] == cargo
+            (posts["Fonte"] == fonte)
+            & (posts["Cargo"] == cargo)
         ]
 
-        subgrupos = (
-            dados["Subgrupo"]
-            .dropna()
-            .unique()
+        subgrupos = sorted(dados["Subgrupo"].dropna().unique())
+
+        if not subgrupos:
+            return {"display": "none"}, [], None
+
+        return (
+            {"display": "block", "marginBottom": "15px"},
+            [{"label": s, "value": s} for s in subgrupos],
+            subgrupos[0],
         )
 
-        if len(subgrupos) > 0:
 
+    # ========================================================
+    # 3. ORIGEM + CARGO + SUBGRUPO → REDES
+    # ========================================================
+
+    @app.callback(
+        Output("posts_filtro_rede", "options"),
+        Output("posts_filtro_rede", "value"),
+        Input("posts_filtro_fonte", "value"),
+        Input("posts_filtro_cargo", "value"),
+        Input("posts_filtro_subgrupo", "value"),
+    )
+    def atualizar_redes(fonte, cargo, subgrupo):
+        dados = posts[
+            (posts["Fonte"] == fonte)
+            & (posts["Cargo"] == cargo)
+        ].copy()
+
+        subgrupos = dados["Subgrupo"].dropna().unique()
+
+        if len(subgrupos):
             if not subgrupo:
                 return [], None
+            dados = dados[dados["Subgrupo"] == subgrupo]
 
-            dados = dados[
-                dados["Subgrupo"] == subgrupo
-            ]
+        redes = sorted(dados["Social network"].dropna().unique())
 
-        redes = sorted(
-            dados["Social network"]
-            .dropna()
-            .unique()
+        return (
+            [{"label": rede, "value": rede} for rede in redes],
+            redes[0] if redes else None,
         )
-
-        opcoes = [
-            {
-                "label": rede,
-                "value": rede
-            }
-            for rede in redes
-        ]
-
-        valor = (
-            redes[0]
-            if redes
-            else None
-        )
-
-        return opcoes, valor
 
 
     # ========================================================
-    # 4. REDE → CANDIDATOS + PERÍODOS
+    # 4. FILTROS → CANDIDATOS + PERÍODOS
     # ========================================================
 
     @app.callback(
-        Output(
-            "posts_filtro_candidato",
-            "options"
-        ),
-        Output(
-            "posts_filtro_candidato",
-            "value"
-        ),
-        Output(
-            "posts_filtro_periodo",
-            "options"
-        ),
-        Output(
-            "posts_filtro_periodo",
-            "value"
-        ),
-
-        Input(
-            "posts_filtro_cargo",
-            "value"
-        ),
-        Input(
-            "posts_filtro_subgrupo",
-            "value"
-        ),
-        Input(
-            "posts_filtro_rede",
-            "value"
-        ),
-        Input(
-            "posts_filtro_top_n",
-            "value"
-        )
+        Output("posts_filtro_candidato", "options"),
+        Output("posts_filtro_candidato", "value"),
+        Output("posts_filtro_periodo", "options"),
+        Output("posts_filtro_periodo", "value"),
+        Input("posts_filtro_fonte", "value"),
+        Input("posts_filtro_cargo", "value"),
+        Input("posts_filtro_subgrupo", "value"),
+        Input("posts_filtro_rede", "value"),
+        Input("posts_filtro_top_n", "value"),
     )
     def atualizar_candidatos_periodos(
-        cargo,
-        subgrupo,
-        rede,
-        top_n
+        fonte, cargo, subgrupo, rede, top_n
     ):
-
         if not cargo or not rede:
             return [], [], [], []
 
         dados = posts[
-            posts["Cargo"] == cargo
-        ]
+            (posts["Fonte"] == fonte)
+            & (posts["Cargo"] == cargo)
+        ].copy()
 
-        subgrupos = (
-            dados["Subgrupo"]
-            .dropna()
-            .unique()
-        )
+        subgrupos = dados["Subgrupo"].dropna().unique()
 
-        if len(subgrupos) > 0:
-
+        if len(subgrupos):
             if not subgrupo:
                 return [], [], [], []
+            dados = dados[dados["Subgrupo"] == subgrupo]
 
-            dados = dados[
-                dados["Subgrupo"] == subgrupo
-            ]
+        dados = dados[dados["Social network"] == rede]
 
-        dados = dados[
-            dados["Social network"] == rede
-        ]
-
-        # ----------------------------------------------------
-        # LIMITAR AOS TOP N MAIS SEGUIDOS
-        # ----------------------------------------------------
+        df_fonte = df_atual[df_atual["Fonte"] == fonte]
 
         top_perfis = obter_top_perfis_por_seguidores(
-            df_atual,
+            df_fonte,
             cargo=cargo,
             subgrupo=subgrupo,
             rede=rede,
             top_n=top_n,
         )
 
-        dados = dados[
-            dados["Profile_padronizado"].isin(top_perfis)
-        ]
+        dados = dados[dados["Profile_padronizado"].isin(top_perfis)]
 
         if dados.empty:
             return [], [], [], []
 
-        # ----------------------------------------------------
-        # CANDIDATOS
-        # ----------------------------------------------------
-
-        candidatos = sorted(
-            dados["Profile_padronizado"]
-            .dropna()
-            .unique()
-        )
-
+        candidatos = sorted(dados["Profile_padronizado"].dropna().unique())
         opcoes_candidatos = [
-            {
-                "label": candidato,
-                "value": candidato
-            }
-            for candidato in candidatos
+            {"label": nome, "value": nome} for nome in candidatos
         ]
 
-        # ----------------------------------------------------
-        # PERÍODOS
-        # ----------------------------------------------------
-
         periodos = (
-            dados[
-                ["Data_Inicio", "Data_Fim"]
-            ]
+            dados[["Data_Inicio", "Data_Fim"]]
             .dropna()
             .drop_duplicates()
             .sort_values("Data_Inicio")
         )
 
         opcoes_periodos = []
-
         for _, periodo in periodos.iterrows():
-
-            inicio = periodo["Data_Inicio"]
-            fim = periodo["Data_Fim"]
+            inicio = pd.to_datetime(periodo["Data_Inicio"])
+            fim = pd.to_datetime(periodo["Data_Fim"])
 
             opcoes_periodos.append({
                 "label": (
                     f"Semana {inicio.strftime('%d/%m')} "
                     f"— {fim.strftime('%d/%m/%Y')}"
                 ),
-                "value": inicio.strftime("%Y-%m-%d")
+                "value": inicio.strftime("%Y-%m-%d"),
             })
 
-        return (
-            opcoes_candidatos,
-            [],
-            opcoes_periodos,
-            []
-        )
+        return opcoes_candidatos, [], opcoes_periodos, []
 
 
     # ========================================================
@@ -881,6 +733,8 @@ def register_callbacks(app, posts, df_atual):
             "children"
         ),
 
+        Input("posts_filtro_fonte", "value"),
+
         Input(
             "posts_filtro_cargo",
             "value"
@@ -912,6 +766,7 @@ def register_callbacks(app, posts, df_atual):
         )
     )
     def atualizar_posts(
+        fonte,
         cargo,
         subgrupo,
         rede,
@@ -920,7 +775,13 @@ def register_callbacks(app, posts, df_atual):
         periodos
     ):
 
-        dados = posts.copy()
+        dados = posts[
+            posts["Fonte"] == fonte
+        ].copy()
+
+        df_fonte = df_atual[
+            df_atual["Fonte"] == fonte
+        ].copy()
 
         # ----------------------------------------------------
         # CARGO
@@ -954,7 +815,7 @@ def register_callbacks(app, posts, df_atual):
         # ----------------------------------------------------
 
         top_perfis = obter_top_perfis_por_seguidores(
-            df_atual,
+            df_fonte,
             cargo=cargo,
             subgrupo=subgrupo,
             rede=rede,
@@ -1059,7 +920,7 @@ def register_callbacks(app, posts, df_atual):
                 html.H3(
                     f"{candidatos_unicos:,}"
                 ),
-                html.P("Candidatos")
+                html.P("Perfis")
             ], style=CARD_STYLE),
 
             html.Div([
@@ -1108,13 +969,13 @@ def register_callbacks(app, posts, df_atual):
             df_count,
             x="Profile_padronizado",
             y="Qtd_Posts",
-            title="Quantidade de publicações por candidato",
+            title="Quantidade de publicações por perfil",
             text="Qtd_Posts"
         )
 
         fig_posts.update_layout(
             template="plotly_white",
-            xaxis_title="Candidato",
+            xaxis_title="Perfil",
             yaxis_title="Publicações",
             title_x=0.5
         )
@@ -1175,12 +1036,12 @@ def register_callbacks(app, posts, df_atual):
             dados_interacoes,
             x="Profile_padronizado",
             y="Interacoes",
-            title="Interações acumuladas por candidato"
+            title="Interações acumuladas por perfil"
         )
 
         fig_interacoes.update_layout(
             template="plotly_white",
-            xaxis_title="Candidato",
+            xaxis_title="Perfil",
             yaxis_title="Interações",
             title_x=0.5
         )
@@ -1206,12 +1067,12 @@ def register_callbacks(app, posts, df_atual):
             dados_engajamento,
             x="Profile_padronizado",
             y="Taxa_Interacao",
-            title="Taxa média de interação por candidato"
+            title="Taxa média de interação por perfil"
         )
 
         fig_engajamento.update_layout(
             template="plotly_white",
-            xaxis_title="Candidato",
+            xaxis_title="Perfil",
             yaxis_title="Taxa de interação",
             title_x=0.5
         )

@@ -141,8 +141,7 @@ def importar_candidatos(
         )
         ON CONFLICT (
             profile_padronizado,
-            cargo,
-            tipo_entidade
+            cargo
         )
         DO NOTHING;
     """)

@@ -1,4 +1,5 @@
 import os
+import pandas as pd
 
 from dash import Dash, dcc, html
 
@@ -15,10 +16,29 @@ from pages import posts as posts_page
 # =========================
 # 📊 Dados
 # =========================
+# =========================
+# DADOS DOS DOIS SCHEMAS
+# =========================
 
-df = carregar_dados_gerais()
-historico = carregar_historico()
-posts = carregar_posts()
+SCHEMAS = ["public", "monitoramento_extra"]
+
+
+def carregar_dados_completos(funcao):
+    dataframes = []
+
+    for schema in SCHEMAS:
+        df_schema = funcao(schema=schema)
+        dataframes.append(df_schema)
+
+    return pd.concat(
+        dataframes,
+        ignore_index=True
+    )
+
+
+df = carregar_dados_completos(carregar_dados_gerais)
+historico = carregar_dados_completos(carregar_historico)
+posts = carregar_dados_completos(carregar_posts)
 
 
 # =========================
@@ -127,7 +147,7 @@ app.layout = html.Div([
         ),
 
         html.P(
-            "Dashboard analítico de desempenho digital por candidato",
+            "Dashboard analítico de desempenho digital",
             style={
                 "margin": 0,
                 "color": "#666"
